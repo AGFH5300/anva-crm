@@ -9,6 +9,8 @@ npm install
 npm run dev
 ```
 
+`npm run dev` now uses the startup helper at `scripts/startup-dev.mjs`, which launches `npm run dev:hot` and warms discovered routes automatically.
+
 Create a `.env.local` file with your Supabase credentials before running locally:
 
 ```bash
@@ -33,6 +35,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=public-anon-key
 
 ## Scripts
 
-- `npm run dev` – Start the Next.js development server.
+- `npm run dev` – Run `scripts/startup-dev.mjs` to start `npm run dev:hot` and trigger automatic route warmup via `scripts/warmup-dev.mjs`.
+- `npm run dev:hot` – Start Next.js in Turbopack mode (`next dev --turbo`).
 - `npm run build` – Produce an optimized production build.
 - `npm run start` – Start the production server.
