@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { addQuotationLine, convertQuotationToSalesOrder, getQuotationDetail } from '@/lib/crmApi';
+import { addQuotationLine, convertQuotationToSalesOrder, deleteQuotationLine, getQuotationDetail } from '@/lib/crmApi';
 import type { Quotation, QuotationLine } from '@/types/crm';
 
 type QuotationDetailPageProps = {
@@ -39,6 +39,15 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
     }
   };
 
+  const onDeleteLine = async (lineId: string) => {
+    try {
+      await deleteQuotationLine(lineId);
+      await load();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
   const onConvert = async () => {
     try {
       const createdId = await convertQuotationToSalesOrder(id);
@@ -60,7 +69,18 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       {quotation.enquiry_id ? <Link className="text-sm text-primary underline" href={`/dashboard/enquiries/${quotation.enquiry_id}`}>Back to enquiry</Link> : null}
       <div className="rounded-xl border border-slate-200 bg-white p-4">
-        {lines.map((line) => <p key={line.id} className="border-b py-2 text-sm last:border-b-0">{line.description} • {line.quantity} × {line.unit_price}</p>)}
+        {lines.map((line) => (
+          <div key={line.id} className="flex items-center justify-between border-b py-2 text-sm last:border-b-0">
+            <p>{line.description} • {line.quantity} × {line.unit_price}</p>
+            <button
+              type="button"
+              onClick={() => onDeleteLine(line.id)}
+              className="rounded border border-red-200 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+            >
+              Delete
+            </button>
+          </div>
+        ))}
       </div>
       <form onSubmit={onAddLine} className="grid gap-2 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-6">
         <input name="description" className="rounded border p-2 md:col-span-2" placeholder="Description" required />
