@@ -14,6 +14,13 @@ type EnquiryLineForm = {
 };
 
 type EnquirySummary = {
+  picName: string;
+  picPhone: string;
+  picEmail: string;
+  vesselName: string;
+  vesselImoNumber: string;
+  shipyard: string;
+  hullNumber: string;
   forValue: string;
   make: string;
   type: string;
@@ -33,6 +40,13 @@ const NewEnquiryPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [summary, setSummary] = useState<EnquirySummary>({
+    picName: '',
+    picPhone: '',
+    picEmail: '',
+    vesselName: '',
+    vesselImoNumber: '',
+    shipyard: '',
+    hullNumber: '',
     forValue: '',
     make: '',
     type: '',
@@ -89,6 +103,13 @@ const NewEnquiryPage = () => {
 
       const enquiry = await createEnquiry({
         clientId: selectedClientId,
+        picName: summary.picName || undefined,
+        picPhone: summary.picPhone || undefined,
+        picEmail: summary.picEmail || undefined,
+        vesselName: summary.vesselName,
+        vesselImoNumber: summary.vesselImoNumber || undefined,
+        shipyard: summary.shipyard || undefined,
+        hullNumber: summary.hullNumber || undefined,
         machineryFor: summary.forValue || undefined,
         machineryMake: summary.make || undefined,
         machineryType: summary.type || undefined,
@@ -137,6 +158,16 @@ const NewEnquiryPage = () => {
         </select>
 
         <hr />
+
+        <div className="grid gap-2 md:grid-cols-2">
+          <input value={summary.picName} onChange={(event) => updateSummary('picName', event.target.value)} className="rounded border p-2" placeholder="PIC name" />
+          <input value={summary.picPhone} onChange={(event) => updateSummary('picPhone', event.target.value)} className="rounded border p-2" placeholder="PIC phone" />
+          <input value={summary.picEmail} onChange={(event) => updateSummary('picEmail', event.target.value)} type="email" className="rounded border p-2 md:col-span-2" placeholder="PIC email" />
+          <input value={summary.vesselName} onChange={(event) => updateSummary('vesselName', event.target.value)} className="rounded border p-2" placeholder="Vessel name" required />
+          <input value={summary.vesselImoNumber} onChange={(event) => updateSummary('vesselImoNumber', event.target.value)} className="rounded border p-2" placeholder="IMO (optional)" />
+          <input value={summary.shipyard} onChange={(event) => updateSummary('shipyard', event.target.value)} className="rounded border p-2" placeholder="Shipyard (optional)" />
+          <input value={summary.hullNumber} onChange={(event) => updateSummary('hullNumber', event.target.value)} className="rounded border p-2" placeholder="Hull number (optional)" />
+        </div>
 
         <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
           <div className="grid grid-cols-[110px,1fr] items-center gap-2 text-sm text-slate-700">
