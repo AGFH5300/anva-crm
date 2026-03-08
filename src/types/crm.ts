@@ -6,10 +6,7 @@ export type Enquiry = {
   id: string;
   client_id: string;
   contact_id: string | null;
-  subject: string;
-  description: string | null;
   status: 'new' | 'qualified' | 'proposal' | 'negotiation' | 'won' | 'lost';
-  priority: 'low' | 'medium' | 'high';
   machinery_for: string | null;
   machinery_make: string | null;
   machinery_type: string | null;
@@ -20,6 +17,8 @@ export type Enquiry = {
 export type EnquiryLine = {
   id: string;
   enquiry_id: string;
+  item_serial_no: string | null;
+  part_no: string | null;
   description: string;
   quantity: number;
   unit_price: number;

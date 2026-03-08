@@ -35,99 +35,30 @@ const callFirstAvailableRpc = async <T>(names: string[], args: Record<string, un
   );
 };
 
-
-type GenericRow = Record<string, unknown>;
-
-const readAccountName = (row: GenericRow) => {
-  const value = row.name ?? row.account_name ?? row.display_name ?? row.company_name;
-  return typeof value === 'string' ? value.trim() : '';
-};
-
-const isCustomerAccount = (row: GenericRow) => {
-  const accountType = String(row.account_type ?? row.type ?? row.category ?? '').toLowerCase();
-  const customerFlag = row.is_customer;
-
-  if (typeof customerFlag === 'boolean') {
-    return customerFlag;
-  }
-
-  if (!accountType) {
-    return true;
-  }
-
-  return ['customer', 'client', 'both'].some((value) => accountType.includes(value));
-};
-
-const normalizeAccounts = (rows: GenericRow[]) => {
-  return rows
-    .map((row) => ({
-      id: String(row.id ?? ''),
-      name: readAccountName(row),
-      isCustomer: isCustomerAccount(row)
-    }))
-    .filter((row) => row.id && row.name && row.isCustomer)
-    .map(({ id, name }) => ({ id, name }))
-    .sort((a, b) => a.name.localeCompare(b.name));
-};
-
-const TRIAL_CUSTOMERS = [
-  'Premier Marine Engineering Services, DMC, Dubai. PO Box 113417',
-  'Silverburn'
-] as const;
-
 export const listClients = async () => {
   const { data, error } = await supabase
-    .schema('public')
-    .from('accounts')
-    .select('*');
+    .schema('crm')
+    .from('clients')
+    .select('id, name')
+    .order('name');
 
   if (error) {
-    throw new Error(`Unable to read customers from public.accounts: ${error.message}`);
+    throw new Error(`Unable to read customers from crm.clients: ${error.message}`);
   }
 
-  return normalizeAccounts((data ?? []) as GenericRow[]);
+  return (data ?? []) as Array<{ id: string; name: string }>;
 };
 
 export const seedDefaultClientsIfMissing = async (clientNames: string[]) => {
-  const normalized = Array.from(new Set(clientNames.map((name) => name.trim()).filter(Boolean)));
-  const expected = normalized.length ? normalized : [...TRIAL_CUSTOMERS];
-
-  const existing = await listClients();
-  const existingNames = new Set(existing.map((client) => client.name));
-  const missingNames = expected.filter((name) => !existingNames.has(name));
-
-  if (missingNames.length) {
-    const payloadVariants = [
-      missingNames.map((name) => ({ name, account_type: 'customer' })),
-      missingNames.map((name) => ({ name, type: 'customer' })),
-      missingNames.map((name) => ({ name, is_customer: true })),
-      missingNames.map((name) => ({ name }))
-    ];
-
-    for (const payload of payloadVariants) {
-      const { error } = await supabase.schema('public').from('accounts').upsert(payload, { onConflict: 'name' });
-      if (!error) {
-        break;
-      }
-    }
-  }
-
-  try {
-    const refreshed = await listClients();
-    if (!refreshed.length) {
-      return [...TRIAL_CUSTOMERS].map((name) => ({ id: name, name }));
-    }
-
-    return expected.map((name) => refreshed.find((item) => item.name === name) ?? { id: name, name });
-  } catch {
-    return [...TRIAL_CUSTOMERS].map((name) => ({ id: name, name }));
-  }
+  void clientNames;
+  return listClients();
 };
 
 export const listEnquiries = async () => {
   const { data, error } = await supabase
+    .schema('crm')
     .from('enquiries')
-    .select('id, client_id, contact_id, subject, description, status, priority, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at')
+    .select('id, client_id, contact_id, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at')
     .order('created_at', { ascending: false });
 
   throwIfError(error);
@@ -137,13 +68,15 @@ export const listEnquiries = async () => {
 export const getEnquiryDetail = async (id: string) => {
   const [{ data: enquiry, error: enquiryError }, { data: lines, error: linesError }] = await Promise.all([
     supabase
+      .schema('crm')
       .from('enquiries')
-      .select('id, client_id, contact_id, subject, description, status, priority, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at')
+      .select('id, client_id, contact_id, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at')
       .eq('id', id)
       .single(),
     supabase
+      .schema('crm')
       .from('enquiry_items')
-      .select('id, enquiry_id, description, quantity, unit_price, currency, vat_rate, is_zero_rated, is_exempt, line_total, sort_order')
+      .select('id, enquiry_id, item_serial_no, part_no, description, quantity, unit_price, currency, vat_rate, is_zero_rated, is_exempt, line_total, sort_order')
       .eq('enquiry_id', id)
       .order('sort_order')
   ]);
@@ -160,19 +93,17 @@ export const getEnquiryDetail = async (id: string) => {
 export const createEnquiry = async (payload: EnquiryInput) => {
   const parsed = enquirySchema.parse(payload);
   const { data, error } = await supabase
+    .schema('crm')
     .from('enquiries')
     .insert({
       client_id: parsed.clientId,
       contact_id: parsed.contactId ?? null,
-      subject: parsed.subject ?? `Enquiry ${new Date().toISOString().slice(0, 10)}`,
-      description: parsed.description ?? null,
-      priority: parsed.priority,
       machinery_for: parsed.machineryFor ?? null,
       machinery_make: parsed.machineryMake ?? null,
       machinery_type: parsed.machineryType ?? null,
       machinery_serial_no: parsed.machinerySerialNo ?? null
     })
-    .select('id, client_id, contact_id, subject, description, status, priority, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at')
+    .select('id, client_id, contact_id, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at')
     .single();
 
   throwIfError(error);
@@ -184,6 +115,7 @@ export const addEnquiryLine = async (enquiryId: string, payload: LineInput) => {
   const lineTotal = Number((parsed.quantity * parsed.unitPrice).toFixed(2));
 
   const { data: latest } = await supabase
+    .schema('crm')
     .from('enquiry_items')
     .select('sort_order')
     .eq('enquiry_id', enquiryId)
@@ -192,9 +124,12 @@ export const addEnquiryLine = async (enquiryId: string, payload: LineInput) => {
     .maybeSingle();
 
   const { data, error } = await supabase
+    .schema('crm')
     .from('enquiry_items')
     .insert({
       enquiry_id: enquiryId,
+      item_serial_no: parsed.itemSerialNo ?? null,
+      part_no: parsed.partNo ?? null,
       description: parsed.description,
       quantity: parsed.quantity,
       unit_price: parsed.unitPrice,
@@ -205,7 +140,7 @@ export const addEnquiryLine = async (enquiryId: string, payload: LineInput) => {
       line_total: lineTotal,
       sort_order: (latest?.sort_order ?? 0) + 1
     })
-    .select('id, enquiry_id, description, quantity, unit_price, currency, vat_rate, is_zero_rated, is_exempt, line_total, sort_order')
+    .select('id, enquiry_id, item_serial_no, part_no, description, quantity, unit_price, currency, vat_rate, is_zero_rated, is_exempt, line_total, sort_order')
     .single();
 
   throwIfError(error);
@@ -215,6 +150,7 @@ export const addEnquiryLine = async (enquiryId: string, payload: LineInput) => {
 
 export const deleteEnquiryLine = async (lineId: string) => {
   const { error } = await supabase
+    .schema('crm')
     .from('enquiry_items')
     .delete()
     .eq('id', lineId);
