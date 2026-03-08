@@ -2,8 +2,8 @@
 
 import { FormEvent, KeyboardEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { addEnquiryLine, createEnquiry, listClients } from '@/lib/crmApi';
-import { SUPPORTED_CURRENCIES } from '@/types/crm';
+import { addEnquiryLine, createEnquiry, listActiveJobTypes, listActiveSalesUsers, listClients } from '@/lib/crmApi';
+import { JobType, SalesUser, SUPPORTED_CURRENCIES } from '@/types/crm';
 
 type EnquiryLineForm = {
   id: string;
@@ -14,6 +14,8 @@ type EnquiryLineForm = {
 };
 
 type EnquirySummary = {
+  jobTypeId: string;
+  salesPicUserId: string;
   picName: string;
   picPhone: string;
   picEmail: string;
@@ -40,6 +42,8 @@ const NewEnquiryPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [summary, setSummary] = useState<EnquirySummary>({
+    jobTypeId: '',
+    salesPicUserId: '',
     picName: '',
     picPhone: '',
     picEmail: '',
@@ -54,11 +58,21 @@ const NewEnquiryPage = () => {
   });
   const [lines, setLines] = useState<EnquiryLineForm[]>([createLine(1)]);
   const [customerOptions, setCustomerOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [jobTypeOptions, setJobTypeOptions] = useState<JobType[]>([]);
+  const [salesPicOptions, setSalesPicOptions] = useState<SalesUser[]>([]);
 
   useEffect(() => {
-    listClients()
-      .then(setCustomerOptions)
-      .catch(() => setCustomerOptions([]));
+    Promise.all([listClients(), listActiveJobTypes(), listActiveSalesUsers()])
+      .then(([clients, jobTypes, salesUsers]) => {
+        setCustomerOptions(clients);
+        setJobTypeOptions(jobTypes);
+        setSalesPicOptions(salesUsers);
+      })
+      .catch(() => {
+        setCustomerOptions([]);
+        setJobTypeOptions([]);
+        setSalesPicOptions([]);
+      });
   }, []);
 
   const addItemLine = () => {
@@ -103,6 +117,8 @@ const NewEnquiryPage = () => {
 
       const enquiry = await createEnquiry({
         clientId: selectedClientId,
+        jobTypeId: summary.jobTypeId || undefined,
+        salesPicUserId: summary.salesPicUserId || undefined,
         picName: summary.picName || undefined,
         picPhone: summary.picPhone || undefined,
         picEmail: summary.picEmail || undefined,
@@ -158,6 +174,25 @@ const NewEnquiryPage = () => {
         </select>
 
         <hr />
+
+        <div className="grid gap-2 md:grid-cols-2">
+          <select value={summary.jobTypeId} onChange={(event) => updateSummary('jobTypeId', event.target.value)} className="rounded border p-2">
+            <option value="">Job Type (optional)</option>
+            {jobTypeOptions.map((jobType) => (
+              <option key={jobType.id} value={jobType.id}>
+                {jobType.name}
+              </option>
+            ))}
+          </select>
+          <select value={summary.salesPicUserId} onChange={(event) => updateSummary('salesPicUserId', event.target.value)} className="rounded border p-2">
+            <option value="">Sales PIC (optional)</option>
+            {salesPicOptions.map((user) => (
+              <option key={user.id} value={user.id}>
+                {user.display_name}{user.email ? ` (${user.email})` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
 
         <div className="grid gap-2 md:grid-cols-2">
           <input value={summary.picName} onChange={(event) => updateSummary('picName', event.target.value)} className="rounded border p-2" placeholder="PIC name" />

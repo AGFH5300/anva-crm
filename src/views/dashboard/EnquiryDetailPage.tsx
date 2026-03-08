@@ -2,8 +2,8 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { addEnquiryLine, convertEnquiryToQuotationDraft, deleteEnquiryLine, getEnquiryDetail } from '@/lib/crmApi';
-import type { Enquiry, EnquiryLine } from '@/types/crm';
+import { addEnquiryLine, convertEnquiryToQuotationDraft, deleteEnquiryLine, getEnquiryDetail, listActiveJobTypes, listActiveSalesUsers, updateEnquiry } from '@/lib/crmApi';
+import type { Enquiry, EnquiryLine, JobType, SalesUser } from '@/types/crm';
 
 type EnquiryDetailPageProps = {
   id: string;
@@ -14,10 +14,19 @@ const EnquiryDetailPage = ({ id }: EnquiryDetailPageProps) => {
   const [lines, setLines] = useState<EnquiryLine[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [convertedQuotationId, setConvertedQuotationId] = useState<string | null>(null);
+  const [jobTypeOptions, setJobTypeOptions] = useState<JobType[]>([]);
+  const [salesPicOptions, setSalesPicOptions] = useState<SalesUser[]>([]);
 
   const load = () => getEnquiryDetail(id).then(({ enquiry, lines }) => { setEnquiry(enquiry); setLines(lines); });
 
-  useEffect(() => { load().catch((err: Error) => setError(err.message)); }, [id]);
+  useEffect(() => {
+    Promise.all([load(), listActiveJobTypes(), listActiveSalesUsers()])
+      .then(([, jobTypes, salesUsers]) => {
+        setJobTypeOptions(jobTypes);
+        setSalesPicOptions(salesUsers);
+      })
+      .catch((err: Error) => setError(err.message));
+  }, [id]);
 
   const onAddLine = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -50,6 +59,22 @@ const EnquiryDetailPage = ({ id }: EnquiryDetailPageProps) => {
     }
   };
 
+
+  const onSaveMetadata = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+
+    try {
+      await updateEnquiry(id, {
+        jobTypeId: String(form.get('jobTypeId') ?? '').trim() || undefined,
+        salesPicUserId: String(form.get('salesPicUserId') ?? '').trim() || undefined
+      });
+      await load();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
   const onConvert = async () => {
     try {
       const quotationId = await convertEnquiryToQuotationDraft(id);
@@ -73,6 +98,8 @@ const EnquiryDetailPage = ({ id }: EnquiryDetailPageProps) => {
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
         <p><span className="font-medium">Client:</span> {enquiry.client_name || enquiry.client_id}</p>
         <p><span className="font-medium">PIC:</span> {enquiry.pic_name || '-'}{enquiry.pic_phone ? ` • ${enquiry.pic_phone}` : ''}{enquiry.pic_email ? ` • ${enquiry.pic_email}` : ''}</p>
+        <p><span className="font-medium">Job Type:</span> {enquiry.job_type_name || '-'}</p>
+        <p><span className="font-medium">Sales PIC:</span> {salesPicOptions.find((user) => user.id === enquiry.sales_pic_user_id)?.display_name || '-'}</p>
         <p><span className="font-medium">Vessel:</span> {enquiry.vessel_name || '-'}</p>
         <p><span className="font-medium">IMO:</span> {enquiry.vessel_imo_number || '-'}</p>
         <p><span className="font-medium">Shipyard:</span> {enquiry.shipyard || '-'}</p>
@@ -82,6 +109,28 @@ const EnquiryDetailPage = ({ id }: EnquiryDetailPageProps) => {
         <p><span className="font-medium">TYPE:</span> {enquiry.machinery_type || '-'}</p>
         <p><span className="font-medium">S. No.:</span> {enquiry.machinery_serial_no || '-'}</p>
       </div>
+      <form onSubmit={onSaveMetadata} className="grid gap-2 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-2">
+        <select name="jobTypeId" defaultValue={enquiry.job_type_id || ''} className="rounded border p-2">
+          <option value="">Job Type (optional)</option>
+          {jobTypeOptions.map((jobType) => (
+            <option key={jobType.id} value={jobType.id}>
+              {jobType.name}
+            </option>
+          ))}
+        </select>
+        <select name="salesPicUserId" defaultValue={enquiry.sales_pic_user_id || ''} className="rounded border p-2">
+          <option value="">Sales PIC (optional)</option>
+          {salesPicOptions.map((user) => (
+            <option key={user.id} value={user.id}>
+              {user.display_name}{user.email ? ` (${user.email})` : ''}
+            </option>
+          ))}
+        </select>
+        <button className="w-fit rounded-md bg-slate-800 px-3 py-2 text-sm font-medium text-white" type="submit">
+          Save ownership
+        </button>
+      </form>
+
       <div className="rounded-xl border border-slate-200 bg-white p-4">
         {lines.map((line) => (
           <div key={line.id} className="flex items-center justify-between border-b py-2 text-sm last:border-b-0">
