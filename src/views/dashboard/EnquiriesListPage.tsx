@@ -25,7 +25,7 @@ const EnquiriesListPage = () => {
       <div className="rounded-xl border border-slate-200 bg-white">
         {rows.map((item) => (
           <Link key={item.id} href={`/dashboard/enquiries/${item.id}`} className="block border-b border-slate-100 p-4 last:border-b-0">
-            <p className="font-medium text-slate-900">{item.subject}</p>
+            <p className="font-medium text-slate-900">{item.machinery_for || item.machinery_make || `Enquiry ${item.id.slice(0, 8)}`}</p>
             <p className="text-xs text-slate-500">{item.status}</p>
             {(item.machinery_for || item.machinery_make || item.machinery_type || item.machinery_serial_no) ? (
               <p className="text-xs text-slate-500">

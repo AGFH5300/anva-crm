@@ -168,6 +168,8 @@ create table if not exists crm.enquiry_items (
   id uuid primary key default gen_random_uuid(),
   enquiry_id uuid not null references crm.enquiries (id) on delete cascade,
   product_id uuid references crm.products (id) on delete set null,
+  item_serial_no text,
+  part_no text,
   description text not null,
   quantity numeric(14, 3) not null check (quantity >= 0),
   unit_price numeric(14, 2) not null check (unit_price >= 0),

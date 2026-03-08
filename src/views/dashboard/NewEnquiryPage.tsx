@@ -1,8 +1,8 @@
 'use client';
 
-import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, KeyboardEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { addEnquiryLine, createEnquiry, seedDefaultClientsIfMissing } from '@/lib/crmApi';
+import { addEnquiryLine, createEnquiry, listClients } from '@/lib/crmApi';
 import { SUPPORTED_CURRENCIES } from '@/types/crm';
 
 type EnquiryLineForm = {
@@ -41,20 +41,11 @@ const NewEnquiryPage = () => {
   const [lines, setLines] = useState<EnquiryLineForm[]>([createLine(1)]);
   const [customerOptions, setCustomerOptions] = useState<Array<{ id: string; name: string }>>([]);
 
-  const trialCustomers = useMemo(
-    () => [
-      'Premier Marine Engineering Services, DMC, Dubai. PO Box 113417',
-      'Silverburn'
-    ],
-    []
-  );
-
-
   useEffect(() => {
-    seedDefaultClientsIfMissing(trialCustomers)
+    listClients()
       .then(setCustomerOptions)
-      .catch(() => setCustomerOptions(trialCustomers.map((name) => ({ id: name, name }))));
-  }, [trialCustomers]);
+      .catch(() => setCustomerOptions([]));
+  }, []);
 
   const addItemLine = () => {
     setLines((prev) => [...prev, createLine(prev.length + 1)]);
@@ -89,18 +80,15 @@ const NewEnquiryPage = () => {
     setIsSubmitting(true);
 
     const form = new FormData(event.currentTarget);
-    const selectedClientName = String(form.get('clientName') ?? '').trim();
+    const selectedClientId = String(form.get('clientId') ?? '').trim();
 
     try {
-      const selectedClient = customerOptions.find((client) => client.name === selectedClientName);
-
-      if (!selectedClient) {
+      if (!selectedClientId) {
         throw new Error('Please select a client.');
       }
 
       const enquiry = await createEnquiry({
-        clientId: selectedClient.id,
-        priority: 'medium',
+        clientId: selectedClientId,
         machineryFor: summary.forValue || undefined,
         machineryMake: summary.make || undefined,
         machineryType: summary.type || undefined,
@@ -109,9 +97,9 @@ const NewEnquiryPage = () => {
 
       const lineItems = lines
         .map((line) => ({
-          serialNo: line.serialNo.trim(),
+          itemSerialNo: line.serialNo.trim() || undefined,
           description: line.description.trim(),
-          partNumber: line.partNumber.trim(),
+          partNo: line.partNumber.trim() || undefined,
           quantity: Number(line.quantity),
           unitPrice: 0,
           currency: 'AED' as (typeof SUPPORTED_CURRENCIES)[number],
@@ -119,11 +107,7 @@ const NewEnquiryPage = () => {
           isZeroRated: false,
           isExempt: false
         }))
-        .filter((line) => line.description.length > 0 && Number.isFinite(line.quantity) && line.quantity > 0)
-        .map((line) => ({
-          ...line,
-          description: `${line.serialNo ? `S/No: ${line.serialNo} | ` : ''}${line.description}${line.partNumber ? ` | Part No: ${line.partNumber}` : ''}`
-        }));
+        .filter((line) => line.description.length > 0 && Number.isFinite(line.quantity) && line.quantity > 0);
 
       if (!lineItems.length) {
         throw new Error('Please add at least one item with description and quantity.');
@@ -143,10 +127,10 @@ const NewEnquiryPage = () => {
     <div className="space-y-4">
       <h1 className="text-2xl font-semibold text-slate-900">New enquiry</h1>
       <form onSubmit={onSubmit} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
-        <select name="clientName" className="w-full rounded border p-2" required>
+        <select name="clientId" className="w-full rounded border p-2" required>
           <option value="">Select customer</option>
-          {(customerOptions.length ? customerOptions : trialCustomers.map((name) => ({ id: name, name }))).map((customer) => (
-            <option key={customer.id} value={customer.name}>
+          {customerOptions.map((customer) => (
+            <option key={customer.id} value={customer.id}>
               {customer.name}
             </option>
           ))}
