@@ -46,6 +46,41 @@ export const listClients = async () => {
   return (data ?? []) as Array<{ id: string; name: string }>;
 };
 
+
+export const seedDefaultClientsIfMissing = async (clientNames: string[]) => {
+  const normalized = Array.from(new Set(clientNames.map((name) => name.trim()).filter(Boolean)));
+  if (!normalized.length) {
+    return listClients();
+  }
+
+  const { data: existing, error: existingError } = await supabase
+    .from('clients')
+    .select('id, name')
+    .in('name', normalized);
+
+  throwIfError(existingError);
+
+  const existingNames = new Set((existing ?? []).map((client) => client.name));
+  const missingNames = normalized.filter((name) => !existingNames.has(name));
+
+  if (missingNames.length) {
+    const { error: insertError } = await supabase
+      .from('clients')
+      .insert(missingNames.map((name) => ({ name, type: 'client', status: 'active' })));
+
+    throwIfError(insertError);
+  }
+
+  const { data, error } = await supabase
+    .from('clients')
+    .select('id, name')
+    .in('name', normalized)
+    .order('name');
+
+  throwIfError(error);
+  return (data ?? []) as Array<{ id: string; name: string }>;
+};
+
 export const listEnquiries = async () => {
   const { data, error } = await supabase
     .from('enquiries')
