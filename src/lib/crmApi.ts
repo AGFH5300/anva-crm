@@ -8,7 +8,7 @@ import {
   type LineInput,
   type QuotationLineInput
 } from '@/lib/crmValidation';
-import type { Enquiry, EnquiryLine, Quotation, QuotationLine, SalesOrder, SalesOrderLine } from '@/types/crm';
+import type { Enquiry, EnquiryLine, JobType, Quotation, QuotationLine, SalesOrder, SalesOrderLine, SalesUser } from '@/types/crm';
 
 const throwIfError = (error: PostgrestError | null) => {
   if (error) {
@@ -35,6 +35,11 @@ const callFirstAvailableRpc = async <T>(names: string[], args: Record<string, un
   );
 };
 
+
+const getRelationName = (value: { name: string | null } | Array<{ name: string | null }> | null | undefined) => {
+  if (!value) return null;
+  return Array.isArray(value) ? value[0]?.name ?? null : value.name ?? null;
+};
 export const listClients = async () => {
   const { data, error } = await supabase
     .schema('crm')
@@ -54,17 +59,43 @@ export const seedDefaultClientsIfMissing = async (clientNames: string[]) => {
   return listClients();
 };
 
+export const listActiveJobTypes = async () => {
+  const { data, error } = await supabase
+    .schema('crm')
+    .from('job_types')
+    .select('id, name, code, is_active, sort_order')
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+    .order('name', { ascending: true });
+
+  throwIfError(error);
+  return (data ?? []) as JobType[];
+};
+
+export const listActiveSalesUsers = async () => {
+  const { data, error } = await supabase
+    .schema('crm')
+    .rpc('list_active_sales_users');
+
+  throwIfError(error);
+  return (data ?? []) as SalesUser[];
+};
+
 export const listEnquiries = async () => {
   const { data, error } = await supabase
     .schema('crm')
     .from('enquiries')
-    .select('id, client_id, contact_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at, client:clients(name)')
+    .select('id, client_id, contact_id, job_type_id, sales_pic_user_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at, client:clients(name), job_type:job_types(name)')
     .order('created_at', { ascending: false });
 
   throwIfError(error);
-  return ((data ?? []) as Array<Enquiry & { client?: Array<{ name: string | null }> | null }>).map(({ client, ...item }) => ({
+  return ((data ?? []) as Array<Enquiry & {
+    client?: { name: string | null } | Array<{ name: string | null }> | null;
+    job_type?: { name: string | null } | Array<{ name: string | null }> | null;
+  }>).map(({ client, job_type, ...item }) => ({
     ...item,
-    client_name: client?.[0]?.name ?? null
+    client_name: getRelationName(client) ?? null,
+    job_type_name: getRelationName(job_type) ?? null,
   }));
 };
 
@@ -73,7 +104,7 @@ export const getEnquiryDetail = async (id: string) => {
     supabase
       .schema('crm')
       .from('enquiries')
-      .select('id, client_id, contact_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at, client:clients(name)')
+      .select('id, client_id, contact_id, job_type_id, sales_pic_user_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at, client:clients(name), job_type:job_types(name)')
       .eq('id', id)
       .single(),
     supabase
@@ -87,13 +118,17 @@ export const getEnquiryDetail = async (id: string) => {
   throwIfError(enquiryError);
   throwIfError(linesError);
 
-  const { client, ...enquiryData } = (enquiry as Enquiry & { client?: Array<{ name: string | null }> | null });
+  const { client, job_type, ...enquiryData } = (enquiry as Enquiry & {
+    client?: { name: string | null } | Array<{ name: string | null }> | null;
+    job_type?: { name: string | null } | Array<{ name: string | null }> | null;
+  });
 
   return {
     enquiry: {
       ...enquiryData,
-      client_name: client?.[0]?.name ?? null
-    },
+      client_name: getRelationName(client) ?? null,
+      job_type_name: getRelationName(job_type) ?? null,
+      },
     lines: (lines ?? []) as EnquiryLine[]
   };
 };
@@ -106,6 +141,8 @@ export const createEnquiry = async (payload: EnquiryInput) => {
     .insert({
       client_id: parsed.clientId,
       contact_id: parsed.contactId ?? null,
+      job_type_id: parsed.jobTypeId ?? null,
+      sales_pic_user_id: parsed.salesPicUserId ?? null,
       pic_name: parsed.picName ?? null,
       pic_phone: parsed.picPhone ?? null,
       pic_email: parsed.picEmail ?? null,
@@ -118,7 +155,26 @@ export const createEnquiry = async (payload: EnquiryInput) => {
       machinery_type: parsed.machineryType ?? null,
       machinery_serial_no: parsed.machinerySerialNo ?? null
     })
-    .select('id, client_id, contact_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at')
+    .select('id, client_id, contact_id, job_type_id, sales_pic_user_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at')
+    .single();
+
+  throwIfError(error);
+  return data as Enquiry;
+};
+
+
+export const updateEnquiry = async (id: string, payload: Pick<EnquiryInput, 'jobTypeId' | 'salesPicUserId'>) => {
+  const parsed = enquirySchema.pick({ jobTypeId: true, salesPicUserId: true }).parse(payload);
+
+  const { data, error } = await supabase
+    .schema('crm')
+    .from('enquiries')
+    .update({
+      job_type_id: parsed.jobTypeId ?? null,
+      sales_pic_user_id: parsed.salesPicUserId ?? null
+    })
+    .eq('id', id)
+    .select('id, client_id, contact_id, job_type_id, sales_pic_user_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at')
     .single();
 
   throwIfError(error);

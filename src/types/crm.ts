@@ -7,6 +7,10 @@ export type Enquiry = {
   client_id: string;
   client_name?: string | null;
   contact_id: string | null;
+  job_type_id: string | null;
+  job_type_name?: string | null;
+  sales_pic_user_id: string | null;
+  sales_pic_name?: string | null;
   pic_name: string | null;
   pic_phone: string | null;
   pic_email: string | null;
@@ -20,6 +24,20 @@ export type Enquiry = {
   machinery_type: string | null;
   machinery_serial_no: string | null;
   created_at: string;
+};
+
+export type JobType = {
+  id: string;
+  name: string;
+  code: string | null;
+  is_active: boolean;
+  sort_order: number;
+};
+
+export type SalesUser = {
+  id: string;
+  display_name: string;
+  email: string | null;
 };
 
 export type EnquiryLine = {
