@@ -36,55 +36,98 @@ const callFirstAvailableRpc = async <T>(names: string[], args: Record<string, un
 };
 
 
-export const listClients = async () => {
-  const { data, error } = await supabase
-    .from('clients')
-    .select('id, name')
-    .order('name');
+type GenericRow = Record<string, unknown>;
 
-  throwIfError(error);
-  return (data ?? []) as Array<{ id: string; name: string }>;
+const readAccountName = (row: GenericRow) => {
+  const value = row.name ?? row.account_name ?? row.display_name ?? row.company_name;
+  return typeof value === 'string' ? value.trim() : '';
 };
 
+const isCustomerAccount = (row: GenericRow) => {
+  const accountType = String(row.account_type ?? row.type ?? row.category ?? '').toLowerCase();
+  const customerFlag = row.is_customer;
+
+  if (typeof customerFlag === 'boolean') {
+    return customerFlag;
+  }
+
+  if (!accountType) {
+    return true;
+  }
+
+  return ['customer', 'client', 'both'].some((value) => accountType.includes(value));
+};
+
+const normalizeAccounts = (rows: GenericRow[]) => {
+  return rows
+    .map((row) => ({
+      id: String(row.id ?? ''),
+      name: readAccountName(row),
+      isCustomer: isCustomerAccount(row)
+    }))
+    .filter((row) => row.id && row.name && row.isCustomer)
+    .map(({ id, name }) => ({ id, name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+};
+
+const TRIAL_CUSTOMERS = [
+  'Premier Marine Engineering Services, DMC, Dubai. PO Box 113417',
+  'Silverburn'
+] as const;
+
+export const listClients = async () => {
+  const { data, error } = await supabase
+    .schema('public')
+    .from('accounts')
+    .select('*');
+
+  if (error) {
+    throw new Error(`Unable to read customers from public.accounts: ${error.message}`);
+  }
+
+  return normalizeAccounts((data ?? []) as GenericRow[]);
+};
 
 export const seedDefaultClientsIfMissing = async (clientNames: string[]) => {
   const normalized = Array.from(new Set(clientNames.map((name) => name.trim()).filter(Boolean)));
-  if (!normalized.length) {
-    return listClients();
-  }
+  const expected = normalized.length ? normalized : [...TRIAL_CUSTOMERS];
 
-  const { data: existing, error: existingError } = await supabase
-    .from('clients')
-    .select('id, name')
-    .in('name', normalized);
-
-  throwIfError(existingError);
-
-  const existingNames = new Set((existing ?? []).map((client) => client.name));
-  const missingNames = normalized.filter((name) => !existingNames.has(name));
+  const existing = await listClients();
+  const existingNames = new Set(existing.map((client) => client.name));
+  const missingNames = expected.filter((name) => !existingNames.has(name));
 
   if (missingNames.length) {
-    const { error: insertError } = await supabase
-      .from('clients')
-      .insert(missingNames.map((name) => ({ name, type: 'client', status: 'active' })));
+    const payloadVariants = [
+      missingNames.map((name) => ({ name, account_type: 'customer' })),
+      missingNames.map((name) => ({ name, type: 'customer' })),
+      missingNames.map((name) => ({ name, is_customer: true })),
+      missingNames.map((name) => ({ name }))
+    ];
 
-    throwIfError(insertError);
+    for (const payload of payloadVariants) {
+      const { error } = await supabase.schema('public').from('accounts').upsert(payload, { onConflict: 'name' });
+      if (!error) {
+        break;
+      }
+    }
   }
 
-  const { data, error } = await supabase
-    .from('clients')
-    .select('id, name')
-    .in('name', normalized)
-    .order('name');
+  try {
+    const refreshed = await listClients();
+    if (!refreshed.length) {
+      return [...TRIAL_CUSTOMERS].map((name) => ({ id: name, name }));
+    }
 
-  throwIfError(error);
-  return (data ?? []) as Array<{ id: string; name: string }>;
+    return expected.map((name) => refreshed.find((item) => item.name === name) ?? { id: name, name });
+  } catch {
+    return [...TRIAL_CUSTOMERS].map((name) => ({ id: name, name }));
+  }
 };
 
 export const listEnquiries = async () => {
   const { data, error } = await supabase
     .from('enquiries')
-    .select('id, client_id, contact_id, subject, description, status, priority, created_at')
+    .select('id, client_id, contact_id, subject, description, status, priority, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at')
     .order('created_at', { ascending: false });
 
   throwIfError(error);
@@ -95,7 +138,7 @@ export const getEnquiryDetail = async (id: string) => {
   const [{ data: enquiry, error: enquiryError }, { data: lines, error: linesError }] = await Promise.all([
     supabase
       .from('enquiries')
-      .select('id, client_id, contact_id, subject, description, status, priority, created_at')
+      .select('id, client_id, contact_id, subject, description, status, priority, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at')
       .eq('id', id)
       .single(),
     supabase
@@ -121,11 +164,15 @@ export const createEnquiry = async (payload: EnquiryInput) => {
     .insert({
       client_id: parsed.clientId,
       contact_id: parsed.contactId ?? null,
-      subject: parsed.subject,
+      subject: parsed.subject ?? `Enquiry ${new Date().toISOString().slice(0, 10)}`,
       description: parsed.description ?? null,
-      priority: parsed.priority
+      priority: parsed.priority,
+      machinery_for: parsed.machineryFor ?? null,
+      machinery_make: parsed.machineryMake ?? null,
+      machinery_type: parsed.machineryType ?? null,
+      machinery_serial_no: parsed.machinerySerialNo ?? null
     })
-    .select('id, client_id, contact_id, subject, description, status, priority, created_at')
+    .select('id, client_id, contact_id, subject, description, status, priority, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at')
     .single();
 
   throwIfError(error);
@@ -163,6 +210,16 @@ export const addEnquiryLine = async (enquiryId: string, payload: LineInput) => {
 
   throwIfError(error);
   return data as EnquiryLine;
+};
+
+
+export const deleteEnquiryLine = async (lineId: string) => {
+  const { error } = await supabase
+    .from('enquiry_items')
+    .delete()
+    .eq('id', lineId);
+
+  throwIfError(error);
 };
 
 export const convertEnquiryToQuotationDraft = async (enquiryId: string) => {
@@ -237,6 +294,16 @@ export const addQuotationLine = async (quotationId: string, payload: QuotationLi
 
   throwIfError(error);
   return data as QuotationLine;
+};
+
+
+export const deleteQuotationLine = async (lineId: string) => {
+  const { error } = await supabase
+    .from('quotation_items')
+    .delete()
+    .eq('id', lineId);
+
+  throwIfError(error);
 };
 
 export const convertQuotationToSalesOrder = async (quotationId: string) => {

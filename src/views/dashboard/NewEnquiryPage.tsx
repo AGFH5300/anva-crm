@@ -1,12 +1,13 @@
 'use client';
 
-import { FormEvent, KeyboardEvent, useMemo, useState } from 'react';
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { addEnquiryLine, createEnquiry, seedDefaultClientsIfMissing } from '@/lib/crmApi';
 import { SUPPORTED_CURRENCIES } from '@/types/crm';
 
 type EnquiryLineForm = {
   id: string;
+  serialNo: string;
   partNumber: string;
   description: string;
   quantity: string;
@@ -20,7 +21,8 @@ type EnquirySummary = {
 };
 
 const createLine = (index: number): EnquiryLineForm => ({
-  id: `line-${index}`,
+  id: `line-${Date.now()}-${index}`,
+  serialNo: String(index),
   partNumber: '',
   description: '',
   quantity: '1'
@@ -37,23 +39,34 @@ const NewEnquiryPage = () => {
     serialNumber: ''
   });
   const [lines, setLines] = useState<EnquiryLineForm[]>([createLine(1)]);
+  const [customerOptions, setCustomerOptions] = useState<Array<{ id: string; name: string }>>([]);
 
-  const clientOptions = useMemo(
+  const trialCustomers = useMemo(
     () => [
-      {
-        label: 'Premier Marine Engineering Services, DMC, Dubai. PO Box 113417',
-        key: 'Premier Marine Engineering Services, DMC, Dubai. PO Box 113417'
-      },
-      {
-        label: 'Silverburn',
-        key: 'Silverburn'
-      }
+      'Premier Marine Engineering Services, DMC, Dubai. PO Box 113417',
+      'Silverburn'
     ],
     []
   );
 
+
+  useEffect(() => {
+    seedDefaultClientsIfMissing(trialCustomers)
+      .then(setCustomerOptions)
+      .catch(() => setCustomerOptions(trialCustomers.map((name) => ({ id: name, name }))));
+  }, [trialCustomers]);
+
   const addItemLine = () => {
     setLines((prev) => [...prev, createLine(prev.length + 1)]);
+  };
+
+  const removeItemLine = (id: string) => {
+    setLines((prev) => {
+      if (prev.length <= 1) {
+        return prev;
+      }
+      return prev.filter((line) => line.id !== id);
+    });
   };
 
   const updateSummary = (field: keyof EnquirySummary, value: string) => {
@@ -79,8 +92,7 @@ const NewEnquiryPage = () => {
     const selectedClientName = String(form.get('clientName') ?? '').trim();
 
     try {
-      const clients = await seedDefaultClientsIfMissing(clientOptions.map((client) => client.label));
-      const selectedClient = clients.find((client) => client.name === selectedClientName);
+      const selectedClient = customerOptions.find((client) => client.name === selectedClientName);
 
       if (!selectedClient) {
         throw new Error('Please select a client.');
@@ -88,19 +100,16 @@ const NewEnquiryPage = () => {
 
       const enquiry = await createEnquiry({
         clientId: selectedClient.id,
-        subject: `Enquiry for ${selectedClient.name}${summary.forValue.trim() ? ` - ${summary.forValue.trim()}` : ''}`,
-        priority: 'medium'
+        priority: 'medium',
+        machineryFor: summary.forValue || undefined,
+        machineryMake: summary.make || undefined,
+        machineryType: summary.type || undefined,
+        machinerySerialNo: summary.serialNumber || undefined
       });
-
-      const summaryLines = [
-        summary.forValue.trim() ? `For: ${summary.forValue.trim()}` : '',
-        summary.make.trim() ? `Make: ${summary.make.trim()}` : '',
-        summary.type.trim() ? `Type: ${summary.type.trim()}` : '',
-        summary.serialNumber.trim() ? `S No: ${summary.serialNumber.trim()}` : ''
-      ].filter(Boolean);
 
       const lineItems = lines
         .map((line) => ({
+          serialNo: line.serialNo.trim(),
           description: line.description.trim(),
           partNumber: line.partNumber.trim(),
           quantity: Number(line.quantity),
@@ -113,27 +122,14 @@ const NewEnquiryPage = () => {
         .filter((line) => line.description.length > 0 && Number.isFinite(line.quantity) && line.quantity > 0)
         .map((line) => ({
           ...line,
-          description: `${line.description}${line.partNumber ? ` | Part No: ${line.partNumber}` : ''}`
+          description: `${line.serialNo ? `S/No: ${line.serialNo} | ` : ''}${line.description}${line.partNumber ? ` | Part No: ${line.partNumber}` : ''}`
         }));
 
       if (!lineItems.length) {
         throw new Error('Please add at least one item with description and quantity.');
       }
 
-      const allLines = [
-        ...summaryLines.map((description) => ({
-          description,
-          quantity: 1,
-          unitPrice: 0,
-          currency: 'AED' as (typeof SUPPORTED_CURRENCIES)[number],
-          vatRate: 5,
-          isZeroRated: false,
-          isExempt: false
-        })),
-        ...lineItems
-      ];
-
-      await Promise.all(allLines.map((line) => addEnquiryLine(enquiry.id, line)));
+      await Promise.all(lineItems.map((line) => addEnquiryLine(enquiry.id, line)));
 
       router.push(`/dashboard/enquiries/${enquiry.id}`);
     } catch (err) {
@@ -148,68 +144,48 @@ const NewEnquiryPage = () => {
       <h1 className="text-2xl font-semibold text-slate-900">New enquiry</h1>
       <form onSubmit={onSubmit} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
         <select name="clientName" className="w-full rounded border p-2" required>
-          <option value="">Select client</option>
-          {clientOptions.map((client) => (
-            <option key={client.key} value={client.label}>
-              {client.label}
+          <option value="">Select customer</option>
+          {(customerOptions.length ? customerOptions : trialCustomers.map((name) => ({ id: name, name }))).map((customer) => (
+            <option key={customer.id} value={customer.name}>
+              {customer.name}
             </option>
           ))}
         </select>
 
         <hr />
 
-        <div className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 md:grid-cols-2">
-          <label className="grid gap-1 text-sm text-slate-700">
-            <span className="font-medium">For</span>
-            <input
-              value={summary.forValue}
-              onChange={(event) => updateSummary('forValue', event.target.value)}
-              className="rounded border p-2"
-              placeholder="MGPS"
-            />
-          </label>
-          <label className="grid gap-1 text-sm text-slate-700">
-            <span className="font-medium">Make</span>
+        <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <div className="grid grid-cols-[110px,1fr] items-center gap-2 text-sm text-slate-700">
+            <span className="rounded border border-slate-200 bg-white px-2 py-2 font-medium text-slate-600">FOR</span>
+            <input value={summary.forValue} onChange={(event) => updateSummary('forValue', event.target.value)} className="rounded border p-2" placeholder="MGPS" />
+          </div>
+          <div className="grid grid-cols-[110px,1fr] items-center gap-2 text-sm text-slate-700">
+            <span className="rounded border border-slate-200 bg-white px-2 py-2 font-medium text-slate-600">MAKE</span>
             <input value={summary.make} onChange={(event) => updateSummary('make', event.target.value)} className="rounded border p-2" placeholder="Cathelco" />
-          </label>
-          <label className="grid gap-1 text-sm text-slate-700">
-            <span className="font-medium">Type</span>
+          </div>
+          <div className="grid grid-cols-[110px,1fr] items-center gap-2 text-sm text-slate-700">
+            <span className="rounded border border-slate-200 bg-white px-2 py-2 font-medium text-slate-600">TYPE</span>
             <input value={summary.type} onChange={(event) => updateSummary('type', event.target.value)} className="rounded border p-2" placeholder="16C-DW" />
-          </label>
-          <label className="grid gap-1 text-sm text-slate-700">
-            <span className="font-medium">Serial no.</span>
-            <input
-              value={summary.serialNumber}
-              onChange={(event) => updateSummary('serialNumber', event.target.value)}
-              className="rounded border p-2"
-              placeholder="10029876"
-            />
-          </label>
+          </div>
+          <div className="grid grid-cols-[110px,1fr] items-center gap-2 text-sm text-slate-700">
+            <span className="rounded border border-slate-200 bg-white px-2 py-2 font-medium text-slate-600">S. No.</span>
+            <input value={summary.serialNumber} onChange={(event) => updateSummary('serialNumber', event.target.value)} className="rounded border p-2" placeholder="10029876" />
+          </div>
         </div>
 
         <div className="space-y-2">
-          <div className="grid grid-cols-[auto,1.1fr,2fr,120px] gap-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            <p className="text-center">S/No</p>
+          <div className="grid grid-cols-[110px,1.2fr,2fr,120px,84px] gap-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <p>S/No</p>
             <p>Part No.</p>
             <p>Item Description</p>
             <p>Qty</p>
+            <p className="text-center">Action</p>
           </div>
           {lines.map((line, index) => (
-            <div key={line.id} className="grid grid-cols-[auto,1.1fr,2fr,120px] gap-2">
-              <div className="flex items-center justify-center rounded border border-slate-200 bg-slate-50 px-3 text-sm text-slate-600">{index + 1}</div>
-              <input
-                value={line.partNumber}
-                onChange={(event) => updateLine(line.id, 'partNumber', event.target.value)}
-                className="rounded border p-2"
-                placeholder="Part number"
-              />
-              <input
-                value={line.description}
-                onChange={(event) => updateLine(line.id, 'description', event.target.value)}
-                className="rounded border p-2"
-                placeholder="Item description"
-                required
-              />
+            <div key={line.id} className="grid grid-cols-[110px,1.2fr,2fr,120px,84px] gap-2">
+              <input value={line.serialNo} onChange={(event) => updateLine(line.id, 'serialNo', event.target.value)} className="rounded border p-2" placeholder="1" />
+              <input value={line.partNumber} onChange={(event) => updateLine(line.id, 'partNumber', event.target.value)} className="rounded border p-2" placeholder="Part number" />
+              <input value={line.description} onChange={(event) => updateLine(line.id, 'description', event.target.value)} className="rounded border p-2" placeholder="Item description" required />
               <input
                 value={line.quantity}
                 onChange={(event) => updateLine(line.id, 'quantity', event.target.value)}
@@ -219,9 +195,17 @@ const NewEnquiryPage = () => {
                 min="0.001"
                 step="0.001"
                 className="rounded border p-2"
-                placeholder="Quantity required"
+                placeholder="Quantity"
                 required
               />
+              <button
+                type="button"
+                className="rounded border border-red-200 px-2 text-xs font-medium text-red-600 disabled:opacity-40"
+                disabled={lines.length === 1}
+                onClick={() => removeItemLine(line.id)}
+              >
+                Delete
+              </button>
             </div>
           ))}
         </div>

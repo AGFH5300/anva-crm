@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { addEnquiryLine, convertEnquiryToQuotationDraft, getEnquiryDetail } from '@/lib/crmApi';
+import { addEnquiryLine, convertEnquiryToQuotationDraft, deleteEnquiryLine, getEnquiryDetail } from '@/lib/crmApi';
 import type { Enquiry, EnquiryLine } from '@/types/crm';
 
 type EnquiryDetailPageProps = {
@@ -39,6 +39,15 @@ const EnquiryDetailPage = ({ id }: EnquiryDetailPageProps) => {
     }
   };
 
+  const onDeleteLine = async (lineId: string) => {
+    try {
+      await deleteEnquiryLine(lineId);
+      await load();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
   const onConvert = async () => {
     try {
       const quotationId = await convertEnquiryToQuotationDraft(id);
@@ -58,8 +67,26 @@ const EnquiryDetailPage = ({ id }: EnquiryDetailPageProps) => {
       </div>
       {convertedQuotationId ? <Link className="text-sm text-primary underline" href={`/dashboard/quotations/${convertedQuotationId}`}>Open created quotation</Link> : null}
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
+
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+        <p><span className="font-medium">FOR:</span> {enquiry.machinery_for || '-'}</p>
+        <p><span className="font-medium">MAKE:</span> {enquiry.machinery_make || '-'}</p>
+        <p><span className="font-medium">TYPE:</span> {enquiry.machinery_type || '-'}</p>
+        <p><span className="font-medium">S. No.:</span> {enquiry.machinery_serial_no || '-'}</p>
+      </div>
       <div className="rounded-xl border border-slate-200 bg-white p-4">
-        {lines.map((line) => <p key={line.id} className="border-b py-2 text-sm last:border-b-0">{line.description} • {line.quantity} × {line.unit_price}</p>)}
+        {lines.map((line) => (
+          <div key={line.id} className="flex items-center justify-between border-b py-2 text-sm last:border-b-0">
+            <p>{line.description} • {line.quantity} × {line.unit_price}</p>
+            <button
+              type="button"
+              onClick={() => onDeleteLine(line.id)}
+              className="rounded border border-red-200 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+            >
+              Delete
+            </button>
+          </div>
+        ))}
       </div>
       <form onSubmit={onAddLine} className="grid gap-2 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-5">
         <input name="description" className="rounded border p-2 md:col-span-2" placeholder="Description" required />

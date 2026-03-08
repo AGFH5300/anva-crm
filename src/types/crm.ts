@@ -10,6 +10,10 @@ export type Enquiry = {
   description: string | null;
   status: 'new' | 'qualified' | 'proposal' | 'negotiation' | 'won' | 'lost';
   priority: 'low' | 'medium' | 'high';
+  machinery_for: string | null;
+  machinery_make: string | null;
+  machinery_type: string | null;
+  machinery_serial_no: string | null;
   created_at: string;
 };
 

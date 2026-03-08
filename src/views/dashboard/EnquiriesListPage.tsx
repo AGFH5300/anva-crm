@@ -26,7 +26,15 @@ const EnquiriesListPage = () => {
         {rows.map((item) => (
           <Link key={item.id} href={`/dashboard/enquiries/${item.id}`} className="block border-b border-slate-100 p-4 last:border-b-0">
             <p className="font-medium text-slate-900">{item.subject}</p>
-            <p className="text-xs text-slate-500">{item.status} • {item.priority}</p>
+            <p className="text-xs text-slate-500">{item.status}</p>
+            {(item.machinery_for || item.machinery_make || item.machinery_type || item.machinery_serial_no) ? (
+              <p className="text-xs text-slate-500">
+                {item.machinery_for ? `FOR: ${item.machinery_for}` : ''}
+                {item.machinery_make ? ` • MAKE: ${item.machinery_make}` : ''}
+                {item.machinery_type ? ` • TYPE: ${item.machinery_type}` : ''}
+                {item.machinery_serial_no ? ` • S. No.: ${item.machinery_serial_no}` : ''}
+              </p>
+            ) : null}
           </Link>
         ))}
         {!rows.length ? <p className="p-4 text-sm text-slate-500">No enquiries yet.</p> : null}
