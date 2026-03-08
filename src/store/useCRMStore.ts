@@ -1,3 +1,5 @@
+'use client';
+
 import { create } from 'zustand';
 import type { CommercialDocument, LineItem } from '@/types/documents';
 import { buildCommercialDocument } from '@/services/documentBuilder';

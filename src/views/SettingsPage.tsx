@@ -1,3 +1,5 @@
+'use client';
+
 const SettingsPage = () => {
   const settingsOptions = [
     {

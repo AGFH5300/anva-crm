@@ -1,5 +1,7 @@
+'use client';
+
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import Link from 'next/link';
 import { listQuotations } from '@/lib/crmApi';
 import type { Quotation } from '@/types/crm';
 
@@ -17,7 +19,7 @@ const QuotationsListPage = () => {
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       <div className="rounded-xl border border-slate-200 bg-white">
         {rows.map((item) => (
-          <Link key={item.id} to={`/dashboard/quotations/${item.id}`} className="block border-b border-slate-100 p-4 last:border-b-0">
+          <Link key={item.id} href={`/dashboard/quotations/${item.id}`} className="block border-b border-slate-100 p-4 last:border-b-0">
             <p className="font-medium text-slate-900">{item.document_number}</p>
             <p className="text-xs text-slate-500">{item.status} • {item.currency} {item.total}</p>
           </Link>

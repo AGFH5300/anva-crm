@@ -1,3 +1,5 @@
+'use client';
+
 import { useMemo, useState } from 'react';
 import type { QuotationRecord, EnquiryRecord } from '@/store/useCRMStore';
 import { useCRMStore } from '@/store/useCRMStore';

@@ -1,3 +1,5 @@
+'use client';
+
 import { useMemo } from 'react';
 import { useCRMStore } from '@/store/useCRMStore';
 import QuotationComposer from '@/components/workflows/QuotationComposer';
