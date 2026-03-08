@@ -1,10 +1,12 @@
+'use client';
+
 import { FormEvent, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import { addEnquiryLine, createEnquiry, listClients } from '@/lib/crmApi';
 import { SUPPORTED_CURRENCIES } from '@/types/crm';
 
 const NewEnquiryPage = () => {
-  const navigate = useNavigate();
+  const router = useRouter();
   const [clients, setClients] = useState<Array<{ id: string; name: string }>>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,7 +37,7 @@ const NewEnquiryPage = () => {
         isExempt: false
       });
 
-      navigate(`/dashboard/enquiries/${enquiry.id}`);
+      router.push(`/dashboard/enquiries/${enquiry.id}`);
     } catch (err) {
       setError((err as Error).message);
     }

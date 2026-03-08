@@ -1,3 +1,5 @@
+'use client';
+
 import { useCRMStore } from '@/store/useCRMStore';
 import StatCard from '@/components/summary/StatCard';
 import RecentDocuments from '@/components/summary/RecentDocuments';

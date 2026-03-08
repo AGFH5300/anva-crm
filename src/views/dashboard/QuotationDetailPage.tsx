@@ -1,10 +1,15 @@
+'use client';
+
 import { FormEvent, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import Link from 'next/link';
 import { addQuotationLine, convertQuotationToSalesOrder, getQuotationDetail } from '@/lib/crmApi';
 import type { Quotation, QuotationLine } from '@/types/crm';
 
-const QuotationDetailPage = () => {
-  const { id = '' } = useParams();
+type QuotationDetailPageProps = {
+  id: string;
+};
+
+const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
   const [quotation, setQuotation] = useState<Quotation | null>(null);
   const [lines, setLines] = useState<QuotationLine[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +58,7 @@ const QuotationDetailPage = () => {
       </div>
       {salesOrderId ? <p className="text-sm text-emerald-700">Sales order created: {salesOrderId}</p> : null}
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
-      {quotation.enquiry_id ? <Link className="text-sm text-primary underline" to={`/dashboard/enquiries/${quotation.enquiry_id}`}>Back to enquiry</Link> : null}
+      {quotation.enquiry_id ? <Link className="text-sm text-primary underline" href={`/dashboard/enquiries/${quotation.enquiry_id}`}>Back to enquiry</Link> : null}
       <div className="rounded-xl border border-slate-200 bg-white p-4">
         {lines.map((line) => <p key={line.id} className="border-b py-2 text-sm last:border-b-0">{line.description} • {line.quantity} × {line.unit_price}</p>)}
       </div>

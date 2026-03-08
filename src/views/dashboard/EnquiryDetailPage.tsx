@@ -1,10 +1,15 @@
+'use client';
+
 import { FormEvent, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import Link from 'next/link';
 import { addEnquiryLine, convertEnquiryToQuotationDraft, getEnquiryDetail } from '@/lib/crmApi';
 import type { Enquiry, EnquiryLine } from '@/types/crm';
 
-const EnquiryDetailPage = () => {
-  const { id = '' } = useParams();
+type EnquiryDetailPageProps = {
+  id: string;
+};
+
+const EnquiryDetailPage = ({ id }: EnquiryDetailPageProps) => {
   const [enquiry, setEnquiry] = useState<Enquiry | null>(null);
   const [lines, setLines] = useState<EnquiryLine[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +56,7 @@ const EnquiryDetailPage = () => {
         <h1 className="text-2xl font-semibold text-slate-900">{enquiry.subject}</h1>
         <button type="button" onClick={onConvert} className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-white">Convert to quotation draft</button>
       </div>
-      {convertedQuotationId ? <Link className="text-sm text-primary underline" to={`/dashboard/quotations/${convertedQuotationId}`}>Open created quotation</Link> : null}
+      {convertedQuotationId ? <Link className="text-sm text-primary underline" href={`/dashboard/quotations/${convertedQuotationId}`}>Open created quotation</Link> : null}
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       <div className="rounded-xl border border-slate-200 bg-white p-4">
         {lines.map((line) => <p key={line.id} className="border-b py-2 text-sm last:border-b-0">{line.description} • {line.quantity} × {line.unit_price}</p>)}

@@ -1,3 +1,5 @@
+'use client';
+
 import { useCRMStore } from '@/store/useCRMStore';
 import { formatCurrencyAED, calculateCorporateTax } from '@/config/uaeTax';
 import { formatIsoDate } from '@/utils/date';

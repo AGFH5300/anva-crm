@@ -1,3 +1,5 @@
+'use client';
+
 import { useCRMStore } from '@/store/useCRMStore';
 import { formatCurrencyAED } from '@/config/uaeTax';
 
