@@ -3,8 +3,9 @@ import { Fragment } from 'react';
 
 const navItems = [
   { to: '/dashboard', label: 'Dashboard' },
+  { to: '/dashboard/enquiries', label: 'Enquiries' },
+  { to: '/dashboard/quotations', label: 'Quotations' },
   { to: '/clients', label: 'Clients & Vendors' },
-  { to: '/enquiries', label: 'Enquiries & Quotations' },
   { to: '/orders', label: 'Orders' },
   { to: '/finance', label: 'Finance' },
   { to: '/logistics', label: 'Logistics' },
