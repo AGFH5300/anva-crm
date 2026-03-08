@@ -5,7 +5,15 @@ export type CurrencyCode = (typeof SUPPORTED_CURRENCIES)[number];
 export type Enquiry = {
   id: string;
   client_id: string;
+  client_name?: string | null;
   contact_id: string | null;
+  pic_name: string | null;
+  pic_phone: string | null;
+  pic_email: string | null;
+  vessel_name: string | null;
+  vessel_imo_number: string | null;
+  shipyard: string | null;
+  hull_number: string | null;
   status: 'new' | 'qualified' | 'proposal' | 'negotiation' | 'won' | 'lost';
   machinery_for: string | null;
   machinery_make: string | null;

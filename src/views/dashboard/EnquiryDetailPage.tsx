@@ -64,13 +64,19 @@ const EnquiryDetailPage = ({ id }: EnquiryDetailPageProps) => {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-slate-900">{enquiry.machinery_for || enquiry.machinery_make || `Enquiry ${enquiry.id.slice(0, 8)}`}</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">{enquiry.vessel_name || enquiry.client_name || `Enquiry ${enquiry.id.slice(0, 8)}`}</h1>
         <button type="button" onClick={onConvert} className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-white">Convert to quotation draft</button>
       </div>
       {convertedQuotationId ? <Link className="text-sm text-primary underline" href={`/dashboard/quotations/${convertedQuotationId}`}>Open created quotation</Link> : null}
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+        <p><span className="font-medium">Client:</span> {enquiry.client_name || enquiry.client_id}</p>
+        <p><span className="font-medium">PIC:</span> {enquiry.pic_name || '-'}{enquiry.pic_phone ? ` • ${enquiry.pic_phone}` : ''}{enquiry.pic_email ? ` • ${enquiry.pic_email}` : ''}</p>
+        <p><span className="font-medium">Vessel:</span> {enquiry.vessel_name || '-'}</p>
+        <p><span className="font-medium">IMO:</span> {enquiry.vessel_imo_number || '-'}</p>
+        <p><span className="font-medium">Shipyard:</span> {enquiry.shipyard || '-'}</p>
+        <p><span className="font-medium">Hull Number:</span> {enquiry.hull_number || '-'}</p>
         <p><span className="font-medium">FOR:</span> {enquiry.machinery_for || '-'}</p>
         <p><span className="font-medium">MAKE:</span> {enquiry.machinery_make || '-'}</p>
         <p><span className="font-medium">TYPE:</span> {enquiry.machinery_type || '-'}</p>

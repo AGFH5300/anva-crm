@@ -4,6 +4,13 @@ import { SUPPORTED_CURRENCIES } from '@/types/crm';
 export const enquirySchema = z.object({
   clientId: z.string().uuid(),
   contactId: z.string().uuid().optional(),
+  picName: z.string().trim().max(200).optional(),
+  picPhone: z.string().trim().max(100).optional(),
+  picEmail: z.string().trim().email().max(320).optional(),
+  vesselName: z.string().trim().min(1).max(200),
+  vesselImoNumber: z.string().trim().max(100).optional(),
+  shipyard: z.string().trim().max(200).optional(),
+  hullNumber: z.string().trim().max(200).optional(),
   machineryFor: z.string().trim().max(200).optional(),
   machineryMake: z.string().trim().max(200).optional(),
   machineryType: z.string().trim().max(200).optional(),

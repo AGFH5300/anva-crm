@@ -58,11 +58,14 @@ export const listEnquiries = async () => {
   const { data, error } = await supabase
     .schema('crm')
     .from('enquiries')
-    .select('id, client_id, contact_id, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at')
+    .select('id, client_id, contact_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at, client:clients(name)')
     .order('created_at', { ascending: false });
 
   throwIfError(error);
-  return (data ?? []) as Enquiry[];
+  return ((data ?? []) as Array<Enquiry & { client?: Array<{ name: string | null }> | null }>).map(({ client, ...item }) => ({
+    ...item,
+    client_name: client?.[0]?.name ?? null
+  }));
 };
 
 export const getEnquiryDetail = async (id: string) => {
@@ -70,7 +73,7 @@ export const getEnquiryDetail = async (id: string) => {
     supabase
       .schema('crm')
       .from('enquiries')
-      .select('id, client_id, contact_id, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at')
+      .select('id, client_id, contact_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at, client:clients(name)')
       .eq('id', id)
       .single(),
     supabase
@@ -84,8 +87,13 @@ export const getEnquiryDetail = async (id: string) => {
   throwIfError(enquiryError);
   throwIfError(linesError);
 
+  const { client, ...enquiryData } = (enquiry as Enquiry & { client?: Array<{ name: string | null }> | null });
+
   return {
-    enquiry: enquiry as Enquiry,
+    enquiry: {
+      ...enquiryData,
+      client_name: client?.[0]?.name ?? null
+    },
     lines: (lines ?? []) as EnquiryLine[]
   };
 };
@@ -98,12 +106,19 @@ export const createEnquiry = async (payload: EnquiryInput) => {
     .insert({
       client_id: parsed.clientId,
       contact_id: parsed.contactId ?? null,
+      pic_name: parsed.picName ?? null,
+      pic_phone: parsed.picPhone ?? null,
+      pic_email: parsed.picEmail ?? null,
+      vessel_name: parsed.vesselName,
+      vessel_imo_number: parsed.vesselImoNumber ?? null,
+      shipyard: parsed.shipyard ?? null,
+      hull_number: parsed.hullNumber ?? null,
       machinery_for: parsed.machineryFor ?? null,
       machinery_make: parsed.machineryMake ?? null,
       machinery_type: parsed.machineryType ?? null,
       machinery_serial_no: parsed.machinerySerialNo ?? null
     })
-    .select('id, client_id, contact_id, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at')
+    .select('id, client_id, contact_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at')
     .single();
 
   throwIfError(error);
