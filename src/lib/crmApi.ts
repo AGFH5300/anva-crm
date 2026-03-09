@@ -257,32 +257,64 @@ export const deleteEnquiryLine = async (lineId: string) => {
 };
 
 export const convertEnquiryToQuotationDraft = async (enquiryId: string) => {
+  const { data: enquiry, error: enquiryError } = await supabase
+    .schema('crm')
+    .from('enquiries')
+    .select('id, job_number')
+    .eq('id', enquiryId)
+    .single();
+
+  throwIfError(enquiryError);
+
+  if (!enquiry?.job_number) {
+    throw new Error('Cannot convert enquiry without a parent enquiry job number.');
+  }
+
   const { data, error } = await supabase
     .schema('crm')
     .rpc('crm_convert_enquiry_to_quotation_draft', { p_enquiry_id: enquiryId });
 
   throwIfError(error);
+
+  if (!data) {
+    throw new Error('Conversion succeeded but no quotation id was returned.');
+  }
+
+  const { error: syncError } = await supabase
+    .schema('crm')
+    .from('quotations')
+    .update({ job_number: enquiry.job_number })
+    .eq('id', data);
+
+  throwIfError(syncError);
+
   return data as string;
 };
 
 export const listQuotations = async () => {
   const { data, error } = await supabase
+    .schema('crm')
     .from('quotations')
-    .select('id, enquiry_id, client_id, document_number, status, currency, subtotal, vat_amount, total, created_at')
+    .select('id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, created_at, client:clients(name)')
     .order('created_at', { ascending: false });
 
   throwIfError(error);
-  return (data ?? []) as Quotation[];
+  return ((data ?? []) as Array<Quotation & { client?: { name: string | null } | Array<{ name: string | null }> | null }>).map(({ client, ...item }) => ({
+    ...item,
+    client_name: getRelationName(client) ?? null
+  }));
 };
 
 export const getQuotationDetail = async (id: string) => {
   const [{ data: quotation, error: quotationError }, { data: lines, error: linesError }] = await Promise.all([
     supabase
+      .schema('crm')
       .from('quotations')
-      .select('id, enquiry_id, client_id, document_number, status, currency, subtotal, vat_amount, total, created_at')
+      .select('id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, created_at, client:clients(name), enquiry:enquiries(id,job_number,vessel_name,machinery_for,machinery_make,machinery_type,machinery_serial_no,job_type:job_types(name))')
       .eq('id', id)
       .single(),
     supabase
+      .schema('crm')
       .from('quotation_items')
       .select('id, quotation_id, description, quantity, unit_price, currency, vat_rate, is_zero_rated, is_exempt, discount, line_total, sort_order')
       .eq('quotation_id', id)
@@ -292,8 +324,47 @@ export const getQuotationDetail = async (id: string) => {
   throwIfError(quotationError);
   throwIfError(linesError);
 
+  const quotationRow = quotation as unknown as (Quotation & {
+    client?: { name: string | null } | Array<{ name: string | null }> | null;
+    enquiry?: ({
+      id: string;
+      job_number: string;
+      vessel_name: string | null;
+      machinery_for: string | null;
+      machinery_make: string | null;
+      machinery_type: string | null;
+      machinery_serial_no: string | null;
+      job_type?: { name: string | null } | Array<{ name: string | null }> | null;
+    } | Array<{
+      id: string;
+      job_number: string;
+      vessel_name: string | null;
+      machinery_for: string | null;
+      machinery_make: string | null;
+      machinery_type: string | null;
+      machinery_serial_no: string | null;
+      job_type?: { name: string | null } | Array<{ name: string | null }> | null;
+    }>) | null;
+  });
+
+  const { client, enquiry, ...quotationData } = quotationRow;
+  const parentEnquiry = Array.isArray(enquiry) ? enquiry[0] : enquiry;
+
   return {
-    quotation: quotation as Quotation,
+    quotation: {
+      ...quotationData,
+      client_name: getRelationName(client) ?? null,
+      enquiry: parentEnquiry ? {
+        id: parentEnquiry.id,
+        job_number: parentEnquiry.job_number,
+        vessel_name: parentEnquiry.vessel_name,
+        machinery_for: parentEnquiry.machinery_for,
+        machinery_make: parentEnquiry.machinery_make,
+        machinery_type: parentEnquiry.machinery_type,
+        machinery_serial_no: parentEnquiry.machinery_serial_no
+      } : null,
+      job_type_name: parentEnquiry ? getRelationName(parentEnquiry.job_type) ?? null : null
+    } as Quotation,
     lines: (lines ?? []) as QuotationLine[]
   };
 };
@@ -303,6 +374,7 @@ export const addQuotationLine = async (quotationId: string, payload: QuotationLi
   const lineTotal = Number((parsed.quantity * parsed.unitPrice - parsed.discount).toFixed(2));
 
   const { data: latest } = await supabase
+    .schema('crm')
     .from('quotation_items')
     .select('sort_order')
     .eq('quotation_id', quotationId)
@@ -311,6 +383,7 @@ export const addQuotationLine = async (quotationId: string, payload: QuotationLi
     .maybeSingle();
 
   const { data, error } = await supabase
+    .schema('crm')
     .from('quotation_items')
     .insert({
       quotation_id: quotationId,
@@ -329,17 +402,88 @@ export const addQuotationLine = async (quotationId: string, payload: QuotationLi
     .single();
 
   throwIfError(error);
+  await recalculateQuotationTotals(quotationId);
   return data as QuotationLine;
 };
 
+const recalculateQuotationTotals = async (quotationId: string) => {
+  const { data: lines, error: linesError } = await supabase
+    .schema('crm')
+    .from('quotation_items')
+    .select('quantity, unit_price, discount, vat_rate')
+    .eq('quotation_id', quotationId);
 
-export const deleteQuotationLine = async (lineId: string) => {
+  throwIfError(linesError);
+
+  const computed = (lines ?? []).reduce(
+    (acc, line) => {
+      const baseAmount = Number(line.quantity) * Number(line.unit_price);
+      const discountedBase = Math.max(0, baseAmount - Number(line.discount ?? 0));
+      const lineVat = discountedBase * (Number(line.vat_rate ?? 0) / 100);
+
+      return {
+        subtotal: acc.subtotal + discountedBase,
+        vatAmount: acc.vatAmount + lineVat
+      };
+    },
+    { subtotal: 0, vatAmount: 0 }
+  );
+
+  const subtotal = Number(computed.subtotal.toFixed(2));
+  const vatAmount = Number(computed.vatAmount.toFixed(2));
+  const total = Number((subtotal + vatAmount).toFixed(2));
+
+  const { error: updateError } = await supabase
+    .schema('crm')
+    .from('quotations')
+    .update({ subtotal, vat_amount: vatAmount, total })
+    .eq('id', quotationId);
+
+  throwIfError(updateError);
+};
+
+export const updateQuotationLines = async (
+  quotationId: string,
+  payload: Array<Pick<QuotationLine, 'id' | 'quantity' | 'unit_price' | 'discount' | 'vat_rate'>>
+) => {
+  for (const line of payload) {
+    const quantity = Number(line.quantity);
+    const unitPrice = Number(line.unit_price);
+    const discount = Number(line.discount ?? 0);
+    const vatRate = Number(line.vat_rate ?? 0);
+    const discountedBase = Math.max(0, quantity * unitPrice - discount);
+    const lineVat = discountedBase * (vatRate / 100);
+    const lineTotal = Number((discountedBase + lineVat).toFixed(2));
+
+    const { error } = await supabase
+      .schema('crm')
+      .from('quotation_items')
+      .update({
+        quantity,
+        unit_price: unitPrice,
+        discount,
+        vat_rate: vatRate,
+        line_total: lineTotal
+      })
+      .eq('id', line.id)
+      .eq('quotation_id', quotationId);
+
+    throwIfError(error);
+  }
+
+  await recalculateQuotationTotals(quotationId);
+};
+
+export const deleteQuotationLine = async (quotationId: string, lineId: string) => {
   const { error } = await supabase
+    .schema('crm')
     .from('quotation_items')
     .delete()
-    .eq('id', lineId);
+    .eq('id', lineId)
+    .eq('quotation_id', quotationId);
 
   throwIfError(error);
+  await recalculateQuotationTotals(quotationId);
 };
 
 export const convertQuotationToSalesOrder = async (quotationId: string) => {

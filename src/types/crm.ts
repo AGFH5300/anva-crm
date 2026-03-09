@@ -63,7 +63,9 @@ export type EnquiryLine = {
 export type Quotation = {
   id: string;
   enquiry_id: string | null;
+  job_number: string | null;
   client_id: string;
+  client_name?: string | null;
   document_number: string;
   status: 'draft' | 'sent' | 'accepted' | 'rejected' | 'expired';
   currency: CurrencyCode;
@@ -71,6 +73,8 @@ export type Quotation = {
   vat_amount: number;
   total: number;
   created_at: string;
+  enquiry?: Pick<Enquiry, 'id' | 'job_number' | 'vessel_name' | 'machinery_for' | 'machinery_make' | 'machinery_type' | 'machinery_serial_no'> | null;
+  job_type_name?: string | null;
 };
 
 export type QuotationLine = {
