@@ -271,6 +271,7 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
             ) : null}
             <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onInput={onImportPricing} />
           </div>
+          <input type="file" accept=".csv,.xlsx,.xls" className="rounded border p-2" onInput={onImportPricing} />
         </div>
 
         {lines.map((line) => {
