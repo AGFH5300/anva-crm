@@ -44,6 +44,15 @@ const getRelationName = (value: { name: string | null } | Array<{ name: string |
 };
 
 
+
+const formatSupabaseConnectivityError = (err: unknown, action: string) => {
+  const message = err instanceof Error ? err.message : String(err);
+  if (message === 'Failed to fetch' || message.toLowerCase().includes('failed to fetch')) {
+    return new Error(`Unable to ${action}. Could not reach Supabase API. Check NEXT_PUBLIC_SUPABASE_URL/NEXT_PUBLIC_SUPABASE_ANON_KEY and network access.`);
+  }
+  return err instanceof Error ? err : new Error(message);
+};
+
 const getDiscountAmount = (baseAmount: number, discountPct: number, discountAmount: number) => {
   const pctAmount = baseAmount * (discountPct / 100);
   if (discountAmount > 0) return Math.min(baseAmount, discountAmount);
@@ -96,22 +105,26 @@ export const listActiveSalesUsers = async () => {
 };
 
 export const listEnquiries = async () => {
-  const { data, error } = await supabase
-    .schema('crm')
-    .from('enquiries')
-    .select('id, job_number, enquiry_date, client_id, contact_id, job_type_id, sales_pic_user_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at, client:clients(name), job_type:job_types(name)')
-    .order('enquiry_date', { ascending: false })
-    .order('created_at', { ascending: false });
+  try {
+    const { data, error } = await supabase
+      .schema('crm')
+      .from('enquiries')
+      .select('id, job_number, enquiry_date, client_id, contact_id, job_type_id, sales_pic_user_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at, client:clients(name), job_type:job_types(name)')
+      .order('enquiry_date', { ascending: false })
+      .order('created_at', { ascending: false });
 
-  throwIfError(error);
-  return ((data ?? []) as Array<Enquiry & {
-    client?: { name: string | null } | Array<{ name: string | null }> | null;
-    job_type?: { name: string | null } | Array<{ name: string | null }> | null;
-  }>).map(({ client, job_type, ...item }) => ({
-    ...item,
-    client_name: getRelationName(client) ?? null,
-    job_type_name: getRelationName(job_type) ?? null,
-  }));
+    throwIfError(error);
+    return ((data ?? []) as Array<Enquiry & {
+      client?: { name: string | null } | Array<{ name: string | null }> | null;
+      job_type?: { name: string | null } | Array<{ name: string | null }> | null;
+    }>).map(({ client, job_type, ...item }) => ({
+      ...item,
+      client_name: getRelationName(client) ?? null,
+      job_type_name: getRelationName(job_type) ?? null,
+    }));
+  } catch (err) {
+    throw formatSupabaseConnectivityError(err, 'load enquiries');
+  }
 };
 
 export const getEnquiryDetail = async (id: string) => {
@@ -125,7 +138,7 @@ export const getEnquiryDetail = async (id: string) => {
     supabase
       .schema('crm')
       .from('enquiry_items')
-      .select('id, enquiry_id, item_serial_no, part_no, unit, drawing_reference, supplier_remarks, supplier_description_override, is_hidden_from_supplier_pdf, description, quantity, unit_price, currency, vat_rate, is_zero_rated, is_exempt, line_total, sort_order')
+      .select('id, enquiry_id, item_serial_no, part_no, description, quantity, unit_price, currency, vat_rate, is_zero_rated, is_exempt, line_total, sort_order')
       .eq('enquiry_id', id)
       .order('sort_order')
   ]);
@@ -248,7 +261,7 @@ export const addEnquiryLine = async (enquiryId: string, payload: LineInput) => {
       line_total: lineTotal,
       sort_order: (latest?.sort_order ?? 0) + 1
     })
-    .select('id, enquiry_id, item_serial_no, part_no, unit, drawing_reference, supplier_remarks, supplier_description_override, is_hidden_from_supplier_pdf, description, quantity, unit_price, currency, vat_rate, is_zero_rated, is_exempt, line_total, sort_order')
+    .select('id, enquiry_id, item_serial_no, part_no, description, quantity, unit_price, currency, vat_rate, is_zero_rated, is_exempt, line_total, sort_order')
     .single();
 
   throwIfError(error);
