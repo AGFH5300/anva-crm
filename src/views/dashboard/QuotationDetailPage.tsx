@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { addQuotationLine, convertQuotationToSalesOrder, deleteQuotationLine, getQuotationDetail, updateQuotationLines } from '@/lib/crmApi';
+import { addQuotationLine, convertQuotationToSalesOrder, deleteQuotationLine, getQuotationDetail, updateQuotationCommercialTerms, updateQuotationLines } from '@/lib/crmApi';
 import type { CurrencyCode, Quotation, QuotationLine } from '@/types/crm';
 
 type QuotationDetailPageProps = {
@@ -21,6 +21,20 @@ const toNumber = (value: unknown, fallback = 0) => {
 
 const computeSellPrice = (landedAedCost: number, marginPct: number) => landedAedCost * (1 + marginPct / 100);
 
+const DELIVERY_TERMS_OPTIONS = ['EXW', 'FCA', 'FOB', 'CFR', 'CIF', 'DAP', 'DDP'];
+const PAYMENT_TERMS_OPTIONS = ['Advance Payment', 'Net 15', 'Net 30', 'Net 45', 'COD'];
+
+type CommercialTermsForm = {
+  termsAndConditions: string;
+  deliveryTerms: string;
+  deliveryTime: string;
+  paymentTerms: string;
+  partsOrigin: string;
+  partsQuality: string;
+  companyLetterheadEnabled: boolean;
+  validity: string;
+};
+
 const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
   const [quotation, setQuotation] = useState<Quotation | null>(null);
   const [lines, setLines] = useState<QuotationLine[]>([]);
@@ -31,6 +45,16 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
   const [bulkMarginPct, setBulkMarginPct] = useState(0);
   const [globalDiscountPct, setGlobalDiscountPct] = useState(0);
   const [pricingActionsOpen, setPricingActionsOpen] = useState(false);
+  const [commercialTerms, setCommercialTerms] = useState<CommercialTermsForm>({
+    termsAndConditions: '',
+    deliveryTerms: '',
+    deliveryTime: '',
+    paymentTerms: '',
+    partsOrigin: '',
+    partsQuality: '',
+    companyLetterheadEnabled: false,
+    validity: ''
+  });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const searchParams = useSearchParams();
 
@@ -51,6 +75,16 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
       discount: toNumber(line.discount),
       vat_rate: toNumber(line.vat_rate)
     })));
+    setCommercialTerms({
+      termsAndConditions: quotation.terms_and_conditions ?? '',
+      deliveryTerms: quotation.delivery_terms ?? '',
+      deliveryTime: quotation.delivery_time ?? '',
+      paymentTerms: quotation.payment_terms ?? '',
+      partsOrigin: quotation.parts_origin ?? '',
+      partsQuality: quotation.parts_quality ?? '',
+      companyLetterheadEnabled: quotation.company_letterhead_enabled ?? false,
+      validity: quotation.validity ?? ''
+    });
   });
 
   useEffect(() => { load().catch((err: Error) => setError(err.message)); }, [id]);
@@ -150,12 +184,12 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
     if (!file) return;
 
     try {
-      const loadSpreadsheetModule = new Function('moduleName', 'return import(moduleName);') as (moduleName: string) => Promise<typeof import('xlsx')>;
+      const loadSpreadsheetModule = new Function('moduleName', 'return import(moduleName);') as (moduleName: string) => Promise<any>;
       const XLSX = await loadSpreadsheetModule('xlsx');
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data, { type: 'array' });
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' }) as Array<Record<string, unknown>>;
 
       setEditableLines((previous) => previous.map((line, index) => {
         const row = rows[index] ?? {};
@@ -225,7 +259,25 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
     }).join('');
     const printable = window.open('', '_blank', 'width=900,height=700');
     if (!printable) return;
-    printable.document.write(`<html><body><h1>Quotation ${quotation.document_number}</h1><table border="1" cellspacing="0" cellpadding="6"><thead><tr><th>Description</th><th>Qty</th><th>Unit Price</th><th>Discount</th><th>VAT</th><th>Line Total</th></tr></thead><tbody>${linesHtml}</tbody></table><p>Subtotal: ${liveTotals.subtotal.toFixed(2)}</p><p>VAT: ${liveTotals.vat.toFixed(2)}</p><p><strong>Grand Total: ${liveTotals.total.toFixed(2)}</strong></p></body></html>`);
+    const mustShowCommercialFields = [
+      ['Delivery Terms', commercialTerms.deliveryTerms],
+      ['Payment Terms', commercialTerms.paymentTerms],
+      ['Validity', commercialTerms.validity],
+      ['Delivery Time', commercialTerms.deliveryTime],
+      ['Parts Origin', commercialTerms.partsOrigin],
+      ['Parts Quality', commercialTerms.partsQuality]
+    ].filter(([label, value]) => Boolean(value) || ['Delivery Terms', 'Payment Terms', 'Validity'].includes(label));
+    const commercialRows = mustShowCommercialFields
+      .map(([label, value]) => `<tr><td style="padding:6px;border:1px solid #cbd5e1;font-weight:600;">${label}</td><td style="padding:6px;border:1px solid #cbd5e1;">${value || '-'}</td></tr>`)
+      .join('');
+    const letterheadStyle = commercialTerms.companyLetterheadEnabled
+      ? '<div style="border-bottom:2px solid #0f172a;padding-bottom:10px;margin-bottom:16px;"><h2 style="margin:0;">ANVA Marine & Industrial Supplies</h2><p style="margin:2px 0 0;">Office 1204, Dubai, UAE · +971 00 000 0000 · sales@anva.example</p></div>'
+      : '';
+    const termsBlock = commercialTerms.termsAndConditions
+      ? `<h3 style="margin-top:18px;">Terms & Conditions</h3><p style="white-space:pre-wrap;line-height:1.4;">${commercialTerms.termsAndConditions}</p>`
+      : '';
+
+    printable.document.write(`<html><body style="font-family:Arial,sans-serif;color:#0f172a;">${letterheadStyle}<h1>Quotation ${quotation.document_number}</h1><table border="1" cellspacing="0" cellpadding="6"><thead><tr><th>Description</th><th>Qty</th><th>Unit Price</th><th>Discount</th><th>VAT</th><th>Line Total</th></tr></thead><tbody>${linesHtml}</tbody></table><p>Subtotal: ${liveTotals.subtotal.toFixed(2)}</p><p>VAT: ${liveTotals.vat.toFixed(2)}</p><p><strong>Grand Total: ${liveTotals.total.toFixed(2)}</strong></p><h3>Commercial Terms</h3><table style="border-collapse:collapse;width:100%;">${commercialRows}</table>${termsBlock}</body></html>`);
     printable.document.close();
     printable.print();
   };
@@ -239,6 +291,18 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
   }, { subtotal: 0, vat: 0, total: 0 }), [editableLines]);
 
   if (!quotation) return <p className="text-sm text-slate-500">Loading…</p>;
+
+  const onSaveCommercialTerms = async () => {
+    try {
+      setError(null);
+      setSaveMessage(null);
+      await updateQuotationCommercialTerms(id, commercialTerms);
+      await load();
+      setSaveMessage('Commercial terms saved.');
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -254,6 +318,37 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
       {saveMessage ? <p className="text-sm text-emerald-700">{saveMessage}</p> : null}
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       {quotation.enquiry_id ? <Link className="text-sm text-primary underline" href={`/dashboard/enquiries/${quotation.enquiry_id}`}>Back to enquiry</Link> : null}
+
+      <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-base font-semibold">Commercial Terms</h2>
+          <button type="button" onClick={onSaveCommercialTerms} className="rounded-md bg-slate-800 px-3 py-2 text-sm font-medium text-white">Save commercial terms</button>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          <label className="space-y-1 text-xs font-medium text-slate-600 md:col-span-2">
+            <span>Terms & Conditions</span>
+            <textarea className="min-h-24 w-full rounded border p-2 text-sm" value={commercialTerms.termsAndConditions} onChange={(event) => setCommercialTerms((prev) => ({ ...prev, termsAndConditions: event.target.value }))} />
+          </label>
+          <label className="space-y-1 text-xs font-medium text-slate-600">
+            <span>Delivery Terms</span>
+            <input list="delivery-terms-options" className="w-full rounded border p-2 text-sm" value={commercialTerms.deliveryTerms} onChange={(event) => setCommercialTerms((prev) => ({ ...prev, deliveryTerms: event.target.value }))} />
+            <datalist id="delivery-terms-options">{DELIVERY_TERMS_OPTIONS.map((option) => <option key={option} value={option} />)}</datalist>
+          </label>
+          <label className="space-y-1 text-xs font-medium text-slate-600">
+            <span>Payment Terms</span>
+            <input list="payment-terms-options" className="w-full rounded border p-2 text-sm" value={commercialTerms.paymentTerms} onChange={(event) => setCommercialTerms((prev) => ({ ...prev, paymentTerms: event.target.value }))} />
+            <datalist id="payment-terms-options">{PAYMENT_TERMS_OPTIONS.map((option) => <option key={option} value={option} />)}</datalist>
+          </label>
+          <label className="space-y-1 text-xs font-medium text-slate-600"><span>Delivery Time</span><input className="w-full rounded border p-2 text-sm" value={commercialTerms.deliveryTime} onChange={(event) => setCommercialTerms((prev) => ({ ...prev, deliveryTime: event.target.value }))} /></label>
+          <label className="space-y-1 text-xs font-medium text-slate-600"><span>Validity</span><input className="w-full rounded border p-2 text-sm" value={commercialTerms.validity} onChange={(event) => setCommercialTerms((prev) => ({ ...prev, validity: event.target.value }))} /></label>
+          <label className="space-y-1 text-xs font-medium text-slate-600"><span>Parts Origin</span><input className="w-full rounded border p-2 text-sm" value={commercialTerms.partsOrigin} onChange={(event) => setCommercialTerms((prev) => ({ ...prev, partsOrigin: event.target.value }))} /></label>
+          <label className="space-y-1 text-xs font-medium text-slate-600"><span>Parts Quality</span><input className="w-full rounded border p-2 text-sm" value={commercialTerms.partsQuality} onChange={(event) => setCommercialTerms((prev) => ({ ...prev, partsQuality: event.target.value }))} /></label>
+          <label className="flex items-center gap-2 text-xs font-medium text-slate-600 md:col-span-2">
+            <input type="checkbox" checked={commercialTerms.companyLetterheadEnabled} onChange={(event) => setCommercialTerms((prev) => ({ ...prev, companyLetterheadEnabled: event.target.checked }))} />
+            <span>Use company letterhead for print/PDF output</span>
+          </label>
+        </div>
+      </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-4">
         <div className="mb-3 grid gap-2 md:grid-cols-4">
