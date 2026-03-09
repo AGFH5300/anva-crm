@@ -139,8 +139,7 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
     if (!file) return;
 
     try {
-      const loadXlsx = new Function('moduleName', 'return import(moduleName);') as (moduleName: string) => Promise<typeof import("xlsx")>
-      const XLSX = await loadXlsx('xlsx');
+      const XLSX = await import('xlsx');
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data, { type: 'array' });
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
