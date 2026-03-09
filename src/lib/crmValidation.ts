@@ -32,6 +32,12 @@ export const lineSchema = z.object({
 });
 
 export const quotationLineSchema = lineSchema.extend({
+  supplierCost: z.coerce.number().nonnegative().default(0),
+  supplierCurrency: z.enum(SUPPORTED_CURRENCIES).default('AED'),
+  exchangeRate: z.coerce.number().positive().default(1),
+  landedAedCost: z.coerce.number().nonnegative().default(0),
+  marginPct: z.coerce.number().min(0).max(1000).default(0),
+  discountPct: z.coerce.number().min(0).max(100).default(0),
   discount: z.coerce.number().nonnegative().default(0)
 });
 
