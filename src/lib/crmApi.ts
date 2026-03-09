@@ -59,6 +59,40 @@ const getDiscountAmount = (baseAmount: number, discountPct: number, discountAmou
   return Math.min(baseAmount, pctAmount);
 };
 
+const isUndefinedColumnError = (error: PostgrestError | null) => Boolean(
+  error && (error.code === '42703' || /column .* does not exist/i.test(error.message))
+);
+
+const normalizeQuotation = (row: Record<string, unknown>, clientName: string | null): Quotation => ({
+  id: String(row.id ?? ''),
+  enquiry_id: (row.enquiry_id as string | null | undefined) ?? null,
+  job_number: (row.job_number as string | null | undefined) ?? null,
+  client_id: String(row.client_id ?? ''),
+  client_name: clientName,
+  document_number: String(row.document_number ?? ''),
+  status: ((row.status as Quotation['status'] | undefined) ?? 'draft'),
+  currency: ((row.currency as Quotation['currency'] | undefined) ?? 'AED'),
+  subtotal: Number(row.subtotal ?? 0),
+  vat_amount: Number(row.vat_amount ?? 0),
+  total: Number(row.total ?? 0),
+  terms_and_conditions: (row.terms_and_conditions as string | null | undefined) ?? null,
+  delivery_terms: (row.delivery_terms as string | null | undefined) ?? null,
+  delivery_time: (row.delivery_time as string | null | undefined) ?? null,
+  payment_terms: (row.payment_terms as string | null | undefined) ?? null,
+  parts_origin: (row.parts_origin as string | null | undefined) ?? null,
+  parts_quality: (row.parts_quality as string | null | undefined) ?? null,
+  customer_reference: (row.customer_reference as string | null | undefined) ?? null,
+  customer_trn: (row.customer_trn as string | null | undefined) ?? null,
+  company_trn: (row.company_trn as string | null | undefined) ?? null,
+  pic_details: (row.pic_details as string | null | undefined) ?? null,
+  additional_notes: (row.additional_notes as string | null | undefined) ?? null,
+  company_letterhead_enabled: (row.company_letterhead_enabled as boolean | null | undefined) ?? false,
+  stamp_enabled: (row.stamp_enabled as boolean | null | undefined) ?? true,
+  signature_enabled: (row.signature_enabled as boolean | null | undefined) ?? true,
+  validity: (row.validity as string | null | undefined) ?? null,
+  created_at: String(row.created_at ?? new Date(0).toISOString())
+});
+
 export const listClients = async () => {
   const { data, error } = await supabase
     .schema('crm')
@@ -324,38 +358,45 @@ export const convertEnquiryToQuotationDraft = async (enquiryId: string) => {
 };
 
 export const listQuotations = async () => {
-  const primarySelect = 'id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, terms_and_conditions, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, customer_reference, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, validity, created_at, client:clients(name)';
-  const fallbackSelect = 'id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, customer_reference, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, validity, created_at, client:clients(name)';
+  const selectCandidates = [
+    'id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, terms_and_conditions, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, customer_reference, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, validity, created_at, client:clients(name)',
+    'id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, customer_reference, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, validity, created_at, client:clients(name)',
+    'id, enquiry_id, client_id, document_number, status, currency, subtotal, vat_amount, total, created_at, client:clients(name)'
+  ];
 
-  let data: unknown[] | null = null;
+  let data: Array<Record<string, unknown>> | null = null;
   let error: PostgrestError | null = null;
 
-  ({ data, error } = await supabase
-    .schema('crm')
-    .from('quotations')
-    .select(primarySelect)
-    .in('status', ['draft', 'sent'])
-    .order('created_at', { ascending: false }));
-
-  if (error?.code === '42703' && error.message.includes('terms_and_conditions')) {
-    ({ data, error } = await supabase
+  for (const selectClause of selectCandidates) {
+    const response = await supabase
       .schema('crm')
       .from('quotations')
-      .select(fallbackSelect)
-      .in('status', ['draft', 'sent'])
-      .order('created_at', { ascending: false }));
+      .select(selectClause)
+      .order('created_at', { ascending: false });
+
+    if (!response.error) {
+      data = (response.data ?? []) as unknown as Array<Record<string, unknown>>;
+      error = null;
+      break;
+    }
+
+    error = response.error;
+    if (!isUndefinedColumnError(response.error)) {
+      break;
+    }
   }
 
   throwIfError(error);
-  return ((data ?? []) as Array<Quotation & { client?: { name: string | null } | Array<{ name: string | null }> | null }>).map(({ client, ...item }) => ({
-    ...item,
-    client_name: getRelationName(client) ?? null
-  }));
+
+  return (data ?? []).map((item) => normalizeQuotation(item, getRelationName((item.client as { name: string | null } | Array<{ name: string | null }> | null | undefined)) ?? null));
 };
 
 export const getQuotationDetail = async (id: string) => {
-  const primarySelect = 'id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, terms_and_conditions, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, customer_reference, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, validity, created_at, client:clients(name), enquiry:enquiries(id,job_number,vessel_name,machinery_for,machinery_make,machinery_type,machinery_serial_no,job_type:job_types(name))';
-  const fallbackSelect = 'id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, customer_reference, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, validity, created_at, client:clients(name), enquiry:enquiries(id,job_number,vessel_name,machinery_for,machinery_make,machinery_type,machinery_serial_no,job_type:job_types(name))';
+  const selectCandidates = [
+    'id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, terms_and_conditions, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, customer_reference, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, validity, created_at, client:clients(name), enquiry:enquiries(id,job_number,vessel_name,machinery_for,machinery_make,machinery_type,machinery_serial_no,job_type:job_types(name))',
+    'id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, customer_reference, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, validity, created_at, client:clients(name), enquiry:enquiries(id,job_number,vessel_name,machinery_for,machinery_make,machinery_type,machinery_serial_no,job_type:job_types(name))',
+    'id, enquiry_id, client_id, document_number, status, currency, subtotal, vat_amount, total, created_at, client:clients(name), enquiry:enquiries(id,job_number,vessel_name,machinery_for,machinery_make,machinery_type,machinery_serial_no,job_type:job_types(name))'
+  ];
 
   const linesQuery = supabase
     .schema('crm')
@@ -364,37 +405,36 @@ export const getQuotationDetail = async (id: string) => {
     .eq('quotation_id', id)
     .order('sort_order');
 
-  let quotation: unknown = null;
+  let quotation: Record<string, unknown> | null = null;
   let quotationError: PostgrestError | null = null;
   let lines: unknown[] | null = null;
   let linesError: PostgrestError | null = null;
 
-  [{ data: quotation, error: quotationError }, { data: lines, error: linesError }] = await Promise.all([
-    supabase
-      .schema('crm')
-      .from('quotations')
-      .select(primarySelect)
-      .eq('id', id)
-      .single(),
-    linesQuery
-  ]);
-
-  if (quotationError?.code === '42703' && quotationError.message.includes('terms_and_conditions')) {
-    [{ data: quotation, error: quotationError }, { data: lines, error: linesError }] = await Promise.all([
+  for (const selectClause of selectCandidates) {
+    const [quotationResponse, linesResponse] = await Promise.all([
       supabase
         .schema('crm')
         .from('quotations')
-        .select(fallbackSelect)
+        .select(selectClause)
         .eq('id', id)
         .single(),
       linesQuery
     ]);
+
+    quotation = (quotationResponse.data ?? null) as unknown as Record<string, unknown> | null;
+    quotationError = quotationResponse.error;
+    lines = linesResponse.data;
+    linesError = linesResponse.error;
+
+    if (!quotationError || !isUndefinedColumnError(quotationError)) {
+      break;
+    }
   }
 
   throwIfError(quotationError);
   throwIfError(linesError);
 
-  const quotationRow = quotation as unknown as (Quotation & {
+  const quotationRow = (quotation ?? {}) as unknown as (Quotation & {
     client?: { name: string | null } | Array<{ name: string | null }> | null;
     enquiry?: ({
       id: string;
@@ -422,8 +462,7 @@ export const getQuotationDetail = async (id: string) => {
 
   return {
     quotation: {
-      ...quotationData,
-      client_name: getRelationName(client) ?? null,
+      ...normalizeQuotation(quotationData as unknown as Record<string, unknown>, getRelationName(client) ?? null),
       enquiry: parentEnquiry ? {
         id: parentEnquiry.id,
         job_number: parentEnquiry.job_number,
