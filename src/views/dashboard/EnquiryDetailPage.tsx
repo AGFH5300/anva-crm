@@ -16,7 +16,6 @@ const EnquiryDetailPage = ({ id }: EnquiryDetailPageProps) => {
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [conversionMessage, setConversionMessage] = useState<string | null>(null);
   const [jobTypeOptions, setJobTypeOptions] = useState<JobType[]>([]);
   const [salesPicOptions, setSalesPicOptions] = useState<SalesUser[]>([]);
 
@@ -93,26 +92,21 @@ const EnquiryDetailPage = ({ id }: EnquiryDetailPageProps) => {
   const onConvert = async () => {
     try {
       setError(null);
-      const quotationId = await convertEnquiryToQuotationDraft(id);
-      let quotationReference = quotationId;
 
-      if (quotationId) {
-        try {
-          const { quotation } = await getQuotationDetail(quotationId);
-          quotationReference = quotation.document_number || quotationId;
-        } catch {
-          // fallback to returned quotation id when detail lookup is not available
-        }
+      const quotationId = await convertEnquiryToQuotationDraft(id);
+
+      if (!quotationId) {
+        router.push('/dashboard/quotations?created=1');
+        return;
       }
 
-      setConversionMessage(`Quotation draft created successfully: ${quotationReference}`);
-      setTimeout(() => {
-        if (quotationId) {
-          router.push(`/dashboard/quotations/${quotationId}`);
-        } else {
-          router.push('/dashboard/quotations');
-        }
-      }, 800);
+      try {
+        const { quotation } = await getQuotationDetail(quotationId);
+        const quotationReference = quotation.document_number || quotationId;
+        router.push(`/dashboard/quotations/${quotationId}?created=1&reference=${encodeURIComponent(quotationReference)}`);
+      } catch {
+        router.push(`/dashboard/quotations?created=1&quotationId=${encodeURIComponent(quotationId)}`);
+      }
     } catch (err) {
       setError((err as Error).message);
     }
@@ -127,7 +121,6 @@ const EnquiryDetailPage = ({ id }: EnquiryDetailPageProps) => {
         <button type="button" onClick={onConvert} className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-white">Convert to quotation draft</button>
       </div>
       {searchParams.get('created') === '1' ? <p className="text-sm font-medium text-emerald-700">Enquiry created successfully: {enquiry.job_number}</p> : null}
-      {conversionMessage ? <p className="text-sm text-emerald-700">{conversionMessage}</p> : null}
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">

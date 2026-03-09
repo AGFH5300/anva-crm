@@ -1,13 +1,22 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { listQuotations } from '@/lib/crmApi';
 import type { Quotation } from '@/types/crm';
 
 const QuotationsListPage = () => {
   const [rows, setRows] = useState<Quotation[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+
+  const createdMessage = useMemo(() => {
+    if (searchParams.get('created') !== '1') return null;
+    const quotationId = searchParams.get('quotationId');
+    if (quotationId) return `Quotation draft was created successfully (${quotationId}).`;
+    return 'Quotation draft was created successfully.';
+  }, [searchParams]);
 
   useEffect(() => {
     listQuotations().then(setRows).catch((err: Error) => setError(err.message));
@@ -16,6 +25,7 @@ const QuotationsListPage = () => {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-semibold text-slate-900">Quotations</h1>
+      {createdMessage ? <p className="text-sm text-emerald-700">{createdMessage}</p> : null}
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       <div className="rounded-xl border border-slate-200 bg-white">
         {rows.map((item) => (
