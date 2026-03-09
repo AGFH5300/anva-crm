@@ -163,15 +163,37 @@ export const createEnquiry = async (payload: EnquiryInput) => {
 };
 
 
-export const updateEnquiry = async (id: string, payload: Pick<EnquiryInput, 'jobTypeId' | 'salesPicUserId'>) => {
-  const parsed = enquirySchema.pick({ jobTypeId: true, salesPicUserId: true }).parse(payload);
+export const updateEnquiry = async (
+  id: string,
+  payload: Pick<EnquiryInput, 'jobTypeId' | 'salesPicUserId' | 'picName' | 'picPhone' | 'picEmail' | 'vesselName' | 'vesselImoNumber' | 'shipyard' | 'hullNumber'>
+) => {
+  const parsed = enquirySchema
+    .pick({
+      jobTypeId: true,
+      salesPicUserId: true,
+      picName: true,
+      picPhone: true,
+      picEmail: true,
+      vesselName: true,
+      vesselImoNumber: true,
+      shipyard: true,
+      hullNumber: true
+    })
+    .parse(payload);
 
   const { data, error } = await supabase
     .schema('crm')
     .from('enquiries')
     .update({
       job_type_id: parsed.jobTypeId ?? null,
-      sales_pic_user_id: parsed.salesPicUserId ?? null
+      sales_pic_user_id: parsed.salesPicUserId ?? null,
+      pic_name: parsed.picName ?? null,
+      pic_phone: parsed.picPhone ?? null,
+      pic_email: parsed.picEmail ?? null,
+      vessel_name: parsed.vesselName,
+      vessel_imo_number: parsed.vesselImoNumber ?? null,
+      shipyard: parsed.shipyard ?? null,
+      hull_number: parsed.hullNumber ?? null
     })
     .eq('id', id)
     .select('id, client_id, contact_id, job_type_id, sales_pic_user_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at')

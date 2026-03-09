@@ -67,7 +67,14 @@ const EnquiryDetailPage = ({ id }: EnquiryDetailPageProps) => {
     try {
       await updateEnquiry(id, {
         jobTypeId: String(form.get('jobTypeId') ?? '').trim() || undefined,
-        salesPicUserId: String(form.get('salesPicUserId') ?? '').trim() || undefined
+        salesPicUserId: String(form.get('salesPicUserId') ?? '').trim() || undefined,
+        picName: String(form.get('picName') ?? '').trim() || undefined,
+        picPhone: String(form.get('picPhone') ?? '').trim() || undefined,
+        picEmail: String(form.get('picEmail') ?? '').trim() || undefined,
+        vesselName: String(form.get('vesselName') ?? '').trim(),
+        vesselImoNumber: String(form.get('vesselImoNumber') ?? '').trim() || undefined,
+        shipyard: String(form.get('shipyard') ?? '').trim() || undefined,
+        hullNumber: String(form.get('hullNumber') ?? '').trim() || undefined
       });
       await load();
     } catch (err) {
@@ -126,8 +133,15 @@ const EnquiryDetailPage = ({ id }: EnquiryDetailPageProps) => {
             </option>
           ))}
         </select>
+        <input name="picName" defaultValue={enquiry.pic_name || ''} className="rounded border p-2" placeholder="PIC name" />
+        <input name="picPhone" defaultValue={enquiry.pic_phone || ''} className="rounded border p-2" placeholder="PIC phone" />
+        <input name="picEmail" type="email" defaultValue={enquiry.pic_email || ''} className="rounded border p-2 md:col-span-2" placeholder="PIC email" />
+        <input name="vesselName" defaultValue={enquiry.vessel_name || ''} className="rounded border p-2" placeholder="Vessel name" required />
+        <input name="vesselImoNumber" defaultValue={enquiry.vessel_imo_number || ''} className="rounded border p-2" placeholder="IMO (optional)" />
+        <input name="shipyard" defaultValue={enquiry.shipyard || ''} className="rounded border p-2" placeholder="Shipyard (optional)" />
+        <input name="hullNumber" defaultValue={enquiry.hull_number || ''} className="rounded border p-2" placeholder="Hull number (optional)" />
         <button className="w-fit rounded-md bg-slate-800 px-3 py-2 text-sm font-medium text-white" type="submit">
-          Save ownership
+          Save enquiry details
         </button>
       </form>
 
