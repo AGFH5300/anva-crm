@@ -146,9 +146,13 @@ const NewEnquiryPage = () => {
         throw new Error('Please select a client.');
       }
 
+      if (!summary.jobTypeId) {
+        throw new Error('Job Type is required.');
+      }
+
       const enquiry = await createEnquiry({
         clientId: selectedClientId,
-        jobTypeId: summary.jobTypeId || undefined,
+        jobTypeId: summary.jobTypeId,
         salesPicUserId: summary.salesPicUserId || undefined,
         picName: summary.picName || undefined,
         picPhone: summary.picPhone || undefined,
@@ -183,7 +187,7 @@ const NewEnquiryPage = () => {
 
       await Promise.all(lineItems.map((line) => addEnquiryLine(enquiry.id, line)));
 
-      router.push(`/dashboard/enquiries/${enquiry.id}`);
+      router.push(`/dashboard/enquiries/${enquiry.id}?created=1`);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -211,14 +215,15 @@ const NewEnquiryPage = () => {
 
         <div className="grid gap-2 md:grid-cols-2">
           <div>
-            <select value={summary.jobTypeId} onChange={(event) => updateSummary('jobTypeId', event.target.value)} className="w-full rounded border p-2">
-              <option value="">Job Type (optional)</option>
+            <select value={summary.jobTypeId} onChange={(event) => updateSummary('jobTypeId', event.target.value)} className="w-full rounded border p-2" required>
+              <option value="">Select Job Type</option>
               {jobTypeOptions.map((jobType) => (
                 <option key={jobType.id} value={jobType.id}>
                   {jobType.name}
                 </option>
               ))}
             </select>
+            <p className="mt-1 text-xs text-slate-500">Job Type is required.</p>
             {isLoadingJobTypes ? <p className="mt-1 text-xs text-slate-500">Loading...</p> : null}
             {!isLoadingJobTypes && !jobTypeLoadError && jobTypeOptions.length === 0 ? <p className="mt-1 text-xs text-slate-500">No records found</p> : null}
             {jobTypeLoadError ? <p className="mt-1 text-xs text-red-600">{jobTypeLoadError}</p> : null}

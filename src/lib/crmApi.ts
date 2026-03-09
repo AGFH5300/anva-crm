@@ -16,6 +16,7 @@ const throwIfError = (error: PostgrestError | null) => {
   }
 };
 
+
 const callFirstAvailableRpc = async <T>(names: string[], args: Record<string, unknown>) => {
   let lastError = '';
 
@@ -34,7 +35,6 @@ const callFirstAvailableRpc = async <T>(names: string[], args: Record<string, un
     `No supported conversion RPC found (${names.join(', ')}). Last DB error: ${lastError || 'unknown error'}`
   );
 };
-
 
 const getRelationName = (value: { name: string | null } | Array<{ name: string | null }> | null | undefined) => {
   if (!value) return null;
@@ -89,7 +89,8 @@ export const listEnquiries = async () => {
   const { data, error } = await supabase
     .schema('crm')
     .from('enquiries')
-    .select('id, client_id, contact_id, job_type_id, sales_pic_user_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at, client:clients(name), job_type:job_types(name)')
+    .select('id, job_number, enquiry_date, client_id, contact_id, job_type_id, sales_pic_user_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at, client:clients(name), job_type:job_types(name)')
+    .order('enquiry_date', { ascending: false })
     .order('created_at', { ascending: false });
 
   throwIfError(error);
@@ -108,7 +109,7 @@ export const getEnquiryDetail = async (id: string) => {
     supabase
       .schema('crm')
       .from('enquiries')
-      .select('id, client_id, contact_id, job_type_id, sales_pic_user_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at, client:clients(name), job_type:job_types(name)')
+      .select('id, job_number, enquiry_date, client_id, contact_id, job_type_id, sales_pic_user_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at, client:clients(name), job_type:job_types(name)')
       .eq('id', id)
       .single(),
     supabase
@@ -145,7 +146,7 @@ export const createEnquiry = async (payload: EnquiryInput) => {
     .insert({
       client_id: parsed.clientId,
       contact_id: parsed.contactId ?? null,
-      job_type_id: parsed.jobTypeId ?? null,
+      job_type_id: parsed.jobTypeId,
       sales_pic_user_id: parsed.salesPicUserId ?? null,
       pic_name: parsed.picName ?? null,
       pic_phone: parsed.picPhone ?? null,
@@ -159,7 +160,7 @@ export const createEnquiry = async (payload: EnquiryInput) => {
       machinery_type: parsed.machineryType ?? null,
       machinery_serial_no: parsed.machinerySerialNo ?? null
     })
-    .select('id, client_id, contact_id, job_type_id, sales_pic_user_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at')
+    .select('id, job_number, enquiry_date, client_id, contact_id, job_type_id, sales_pic_user_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at')
     .single();
 
   throwIfError(error);
@@ -189,7 +190,7 @@ export const updateEnquiry = async (
     .schema('crm')
     .from('enquiries')
     .update({
-      job_type_id: parsed.jobTypeId ?? null,
+      job_type_id: parsed.jobTypeId,
       sales_pic_user_id: parsed.salesPicUserId ?? null,
       pic_name: parsed.picName ?? null,
       pic_phone: parsed.picPhone ?? null,
@@ -200,7 +201,7 @@ export const updateEnquiry = async (
       hull_number: parsed.hullNumber ?? null
     })
     .eq('id', id)
-    .select('id, client_id, contact_id, job_type_id, sales_pic_user_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at')
+    .select('id, job_number, enquiry_date, client_id, contact_id, job_type_id, sales_pic_user_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at')
     .single();
 
   throwIfError(error);
@@ -256,10 +257,12 @@ export const deleteEnquiryLine = async (lineId: string) => {
 };
 
 export const convertEnquiryToQuotationDraft = async (enquiryId: string) => {
-  return callFirstAvailableRpc<string>(
-    ['convert_enquiry_to_quotation_draft', 'crm_convert_enquiry_to_quotation_draft'],
-    { p_enquiry_id: enquiryId }
-  );
+  const { data, error } = await supabase
+    .schema('crm')
+    .rpc('crm_convert_enquiry_to_quotation_draft', { p_enquiry_id: enquiryId });
+
+  throwIfError(error);
+  return data as string;
 };
 
 export const listQuotations = async () => {

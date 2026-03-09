@@ -4,10 +4,12 @@ export type CurrencyCode = (typeof SUPPORTED_CURRENCIES)[number];
 
 export type Enquiry = {
   id: string;
+  job_number: string;
+  enquiry_date: string;
   client_id: string;
   client_name?: string | null;
   contact_id: string | null;
-  job_type_id: string | null;
+  job_type_id: string;
   job_type_name?: string | null;
   sales_pic_user_id: string | null;
   sales_pic_name?: string | null;
