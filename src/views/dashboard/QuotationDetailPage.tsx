@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { addQuotationLine, convertQuotationToSalesOrder, deleteQuotationLine, getQuotationDetail, updateQuotationLines } from '@/lib/crmApi';
@@ -30,6 +30,8 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [bulkMarginPct, setBulkMarginPct] = useState(0);
   const [globalDiscountPct, setGlobalDiscountPct] = useState(0);
+  const [pricingActionsOpen, setPricingActionsOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const searchParams = useSearchParams();
 
   const load = () => getQuotationDetail(id).then(({ quotation, lines }) => {
@@ -131,6 +133,15 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
       };
     }));
     setSaveMessage('Bulk margin/discount applied. You can still adjust any line before saving.');
+  };
+
+  const openPricingAction = (action: 'manual' | 'excel') => {
+    setPricingActionsOpen(false);
+    if (action === 'manual') {
+      setSaveMessage('Manual line-by-line supplier pricing is ready below.');
+      return;
+    }
+    fileInputRef.current?.click();
   };
 
   const onImportPricing = async (event: FormEvent<HTMLInputElement>) => {
@@ -243,6 +254,23 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
           <input type="number" step="0.01" className="rounded border p-2" placeholder="Bulk margin %" value={bulkMarginPct} onChange={(e) => setBulkMarginPct(toNumber(e.target.value))} />
           <input type="number" step="0.01" className="rounded border p-2" placeholder="Global discount %" value={globalDiscountPct} onChange={(e) => setGlobalDiscountPct(toNumber(e.target.value))} />
           <button type="button" className="rounded border px-2 py-1" onClick={onBulkApply}>Apply to all lines</button>
+          <div className="relative">
+            <button
+              type="button"
+              className="rounded border px-3 py-2 text-sm font-medium"
+              onClick={() => setPricingActionsOpen((prev) => !prev)}
+            >
+              Add supplier pricing
+            </button>
+            {pricingActionsOpen ? (
+              <div className="absolute right-0 z-10 mt-2 w-56 rounded-md border border-slate-200 bg-white p-2 shadow">
+                <button type="button" onClick={() => openPricingAction('manual')} className="block w-full rounded px-2 py-2 text-left text-sm hover:bg-slate-50">Enter manually</button>
+                <button type="button" onClick={() => openPricingAction('excel')} className="block w-full rounded px-2 py-2 text-left text-sm hover:bg-slate-50">Import Excel / CSV</button>
+                <p className="mt-2 text-xs text-slate-500">Coming soon: PDF import, text import, AI quote recognition.</p>
+              </div>
+            ) : null}
+            <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onInput={onImportPricing} />
+          </div>
           <input type="file" accept=".csv,.xlsx,.xls" className="rounded border p-2" onInput={onImportPricing} />
         </div>
 
