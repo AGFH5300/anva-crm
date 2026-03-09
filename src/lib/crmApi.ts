@@ -8,7 +8,7 @@ import {
   type LineInput,
   type QuotationLineInput
 } from '@/lib/crmValidation';
-import type { Enquiry, EnquiryLine, JobType, Quotation, QuotationLine, SalesOrder, SalesOrderLine, SalesUser } from '@/types/crm';
+import type { Enquiry, EnquiryLine, JobType, Quotation, QuotationLine, SalesOrder, SalesOrderLine, SalesUser, Supplier, SupplierRfqDocument } from '@/types/crm';
 
 const throwIfError = (error: PostgrestError | null) => {
   if (error) {
@@ -123,7 +123,7 @@ export const getEnquiryDetail = async (id: string) => {
     supabase
       .schema('crm')
       .from('enquiry_items')
-      .select('id, enquiry_id, item_serial_no, part_no, description, quantity, unit_price, currency, vat_rate, is_zero_rated, is_exempt, line_total, sort_order')
+      .select('id, enquiry_id, item_serial_no, part_no, unit, drawing_reference, supplier_remarks, supplier_description_override, is_hidden_from_supplier_pdf, description, quantity, unit_price, currency, vat_rate, is_zero_rated, is_exempt, line_total, sort_order')
       .eq('enquiry_id', id)
       .order('sort_order')
   ]);
@@ -246,7 +246,7 @@ export const addEnquiryLine = async (enquiryId: string, payload: LineInput) => {
       line_total: lineTotal,
       sort_order: (latest?.sort_order ?? 0) + 1
     })
-    .select('id, enquiry_id, item_serial_no, part_no, description, quantity, unit_price, currency, vat_rate, is_zero_rated, is_exempt, line_total, sort_order')
+    .select('id, enquiry_id, item_serial_no, part_no, unit, drawing_reference, supplier_remarks, supplier_description_override, is_hidden_from_supplier_pdf, description, quantity, unit_price, currency, vat_rate, is_zero_rated, is_exempt, line_total, sort_order')
     .single();
 
   throwIfError(error);
@@ -546,4 +546,137 @@ export const getSalesOrderDetail = async (id: string) => {
     order: order as SalesOrder,
     lines: (lines ?? []) as SalesOrderLine[]
   };
+};
+
+
+type SupplierInput = {
+  companyName: string;
+  contactPerson?: string;
+  email?: string;
+  phone?: string;
+  mobile?: string;
+  addressLine1?: string;
+  city?: string;
+  country?: string;
+  notes?: string;
+};
+
+export const listSuppliers = async (search = '') => {
+  let query = supabase
+    .schema('crm')
+    .from('suppliers')
+    .select('id,supplier_code,company_name,contact_person,email,phone,mobile,website,address_line_1,address_line_2,city,state,country,postal_code,tax_registration_no,payment_terms,currency,vendor_type,notes,created_at,updated_at')
+    .order('company_name', { ascending: true })
+    .limit(100);
+
+  if (search.trim()) {
+    query = query.or(`company_name.ilike.%${search.trim()}%,email.ilike.%${search.trim()}%,contact_person.ilike.%${search.trim()}%`);
+  }
+
+  const { data, error } = await query;
+  throwIfError(error);
+  return (data ?? []) as Supplier[];
+};
+
+export const checkSupplierDuplicates = async (companyName: string, email?: string) => {
+  const clauses = [`company_name.ilike.${companyName.trim()}`];
+  if (email?.trim()) clauses.push(`email.ilike.${email.trim()}`);
+  const { data, error } = await supabase
+    .schema('crm')
+    .from('suppliers')
+    .select('id,company_name,email')
+    .or(clauses.join(','))
+    .limit(5);
+
+  throwIfError(error);
+  return data ?? [];
+};
+
+export const createSupplier = async (payload: SupplierInput) => {
+  const { data, error } = await supabase
+    .schema('crm')
+    .from('suppliers')
+    .insert({
+      company_name: payload.companyName.trim(),
+      contact_person: payload.contactPerson?.trim() || null,
+      email: payload.email?.trim() || null,
+      phone: payload.phone?.trim() || null,
+      mobile: payload.mobile?.trim() || null,
+      address_line_1: payload.addressLine1?.trim() || null,
+      city: payload.city?.trim() || null,
+      country: payload.country?.trim() || null,
+      notes: payload.notes?.trim() || null
+    })
+    .select('id,supplier_code,company_name,contact_person,email,phone,mobile,website,address_line_1,address_line_2,city,state,country,postal_code,tax_registration_no,payment_terms,currency,vendor_type,notes,created_at,updated_at')
+    .single();
+
+  throwIfError(error);
+  return data as Supplier;
+};
+
+export const createSupplierRfqDocumentLog = async (payload: {
+  enquiryId: string;
+  supplierId: string;
+  documentNumber: string;
+  includeSerialNumber: boolean;
+  filePath: string;
+  notes?: string;
+  selectedLineIds?: string[];
+}) => {
+  const { data, error } = await supabase
+    .schema('crm')
+    .from('supplier_rfq_documents')
+    .insert({
+      enquiry_id: payload.enquiryId,
+      supplier_id: payload.supplierId,
+      document_type: 'supplier_rfq_pdf',
+      document_number: payload.documentNumber,
+      include_serial_number: payload.includeSerialNumber,
+      file_path: payload.filePath,
+      notes: payload.notes ?? null,
+      selected_line_ids: payload.selectedLineIds ?? []
+    })
+    .select('id,enquiry_id,supplier_id,document_type,document_number,include_serial_number,file_path,generated_by,generated_at,notes')
+    .single();
+
+  throwIfError(error);
+  return data as SupplierRfqDocument;
+};
+
+export const upsertEnquirySupplierLink = async (payload: {
+  enquiryId: string;
+  supplier: Supplier;
+  status?: 'draft' | 'generated' | 'sent' | 'quote_received' | 'regretted' | 'closed';
+}) => {
+  const { error } = await supabase
+    .schema('crm')
+    .from('enquiry_suppliers')
+    .upsert({
+      enquiry_id: payload.enquiryId,
+      supplier_id: payload.supplier.id,
+      supplier_name_snapshot: payload.supplier.company_name,
+      contact_person_snapshot: payload.supplier.contact_person,
+      email_snapshot: payload.supplier.email,
+      phone_snapshot: payload.supplier.phone ?? payload.supplier.mobile,
+      status: payload.status ?? 'generated',
+      sent_at: payload.status === 'sent' ? new Date().toISOString() : null
+    }, { onConflict: 'enquiry_id,supplier_id' });
+
+  throwIfError(error);
+};
+
+export const uploadSupplierRfqPdf = async (payload: {
+  enquiryId: string;
+  supplierId: string;
+  documentNumber: string;
+  blob: Blob;
+}) => {
+  const filePath = `supplier-rfqs/${payload.enquiryId}/${payload.supplierId}/${payload.documentNumber}.pdf`;
+  const { error } = await supabase
+    .storage
+    .from('crm-documents')
+    .upload(filePath, payload.blob, { contentType: 'application/pdf', upsert: true });
+
+  if (error) throw new Error(error.message);
+  return filePath;
 };
