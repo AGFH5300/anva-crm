@@ -3,9 +3,11 @@ import { supabase } from '@/lib/supabaseClient';
 import {
   enquirySchema,
   lineSchema,
+  quotationCommercialTermsSchema,
   quotationLineSchema,
   type EnquiryInput,
   type LineInput,
+  type QuotationCommercialTermsInput,
   type QuotationLineInput
 } from '@/lib/crmValidation';
 import type { Enquiry, EnquiryLine, JobType, Quotation, QuotationLine, SalesOrder, SalesOrderLine, SalesUser } from '@/types/crm';
@@ -303,7 +305,7 @@ export const listQuotations = async () => {
   const { data, error } = await supabase
     .schema('crm')
     .from('quotations')
-    .select('id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, created_at, client:clients(name)')
+    .select('id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, terms_and_conditions, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, company_letterhead_enabled, validity, created_at, client:clients(name)')
     .order('created_at', { ascending: false });
 
   throwIfError(error);
@@ -318,7 +320,7 @@ export const getQuotationDetail = async (id: string) => {
     supabase
       .schema('crm')
       .from('quotations')
-      .select('id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, created_at, client:clients(name), enquiry:enquiries(id,job_number,vessel_name,machinery_for,machinery_make,machinery_type,machinery_serial_no,job_type:job_types(name))')
+      .select('id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, terms_and_conditions, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, company_letterhead_enabled, validity, created_at, client:clients(name), enquiry:enquiries(id,job_number,vessel_name,machinery_for,machinery_make,machinery_type,machinery_serial_no,job_type:job_types(name))')
       .eq('id', id)
       .single(),
     supabase
@@ -422,6 +424,27 @@ export const addQuotationLine = async (quotationId: string, payload: QuotationLi
   throwIfError(error);
   await recalculateQuotationTotals(quotationId);
   return data as QuotationLine;
+};
+
+export const updateQuotationCommercialTerms = async (quotationId: string, payload: QuotationCommercialTermsInput) => {
+  const parsed = quotationCommercialTermsSchema.parse(payload);
+
+  const { error } = await supabase
+    .schema('crm')
+    .from('quotations')
+    .update({
+      terms_and_conditions: parsed.termsAndConditions || null,
+      delivery_terms: parsed.deliveryTerms || null,
+      delivery_time: parsed.deliveryTime || null,
+      payment_terms: parsed.paymentTerms || null,
+      parts_origin: parsed.partsOrigin || null,
+      parts_quality: parsed.partsQuality || null,
+      company_letterhead_enabled: parsed.companyLetterheadEnabled,
+      validity: parsed.validity || null
+    })
+    .eq('id', quotationId);
+
+  throwIfError(error);
 };
 
 const recalculateQuotationTotals = async (quotationId: string) => {

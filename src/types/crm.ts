@@ -72,6 +72,14 @@ export type Quotation = {
   subtotal: number;
   vat_amount: number;
   total: number;
+  terms_and_conditions: string | null;
+  delivery_terms: string | null;
+  delivery_time: string | null;
+  payment_terms: string | null;
+  parts_origin: string | null;
+  parts_quality: string | null;
+  company_letterhead_enabled: boolean;
+  validity: string | null;
   created_at: string;
   enquiry?: Pick<Enquiry, 'id' | 'job_number' | 'vessel_name' | 'machinery_for' | 'machinery_make' | 'machinery_type' | 'machinery_serial_no'> | null;
   job_type_name?: string | null;

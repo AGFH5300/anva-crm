@@ -41,6 +41,18 @@ export const quotationLineSchema = lineSchema.extend({
   discount: z.coerce.number().nonnegative().default(0)
 });
 
+export const quotationCommercialTermsSchema = z.object({
+  termsAndConditions: z.string().trim().max(5000).optional(),
+  deliveryTerms: z.string().trim().max(300).optional(),
+  deliveryTime: z.string().trim().max(300).optional(),
+  paymentTerms: z.string().trim().max(300).optional(),
+  partsOrigin: z.string().trim().max(300).optional(),
+  partsQuality: z.string().trim().max(300).optional(),
+  companyLetterheadEnabled: z.boolean().default(false),
+  validity: z.string().trim().max(300).optional()
+});
+
 export type EnquiryInput = z.infer<typeof enquirySchema>;
 export type LineInput = z.infer<typeof lineSchema>;
 export type QuotationLineInput = z.infer<typeof quotationLineSchema>;
+export type QuotationCommercialTermsInput = z.infer<typeof quotationCommercialTermsSchema>;
