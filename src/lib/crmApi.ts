@@ -138,7 +138,7 @@ export const getEnquiryDetail = async (id: string) => {
     supabase
       .schema('crm')
       .from('enquiry_items')
-      .select('id, enquiry_id, item_serial_no, part_no, unit, drawing_reference, supplier_remarks, supplier_description_override, is_hidden_from_supplier_pdf, description, quantity, unit_price, currency, vat_rate, is_zero_rated, is_exempt, line_total, sort_order')
+      .select('id, enquiry_id, item_serial_no, part_no, description, quantity, unit_price, currency, vat_rate, is_zero_rated, is_exempt, line_total, sort_order')
       .eq('enquiry_id', id)
       .order('sort_order')
   ]);
@@ -261,7 +261,7 @@ export const addEnquiryLine = async (enquiryId: string, payload: LineInput) => {
       line_total: lineTotal,
       sort_order: (latest?.sort_order ?? 0) + 1
     })
-    .select('id, enquiry_id, item_serial_no, part_no, unit, drawing_reference, supplier_remarks, supplier_description_override, is_hidden_from_supplier_pdf, description, quantity, unit_price, currency, vat_rate, is_zero_rated, is_exempt, line_total, sort_order')
+    .select('id, enquiry_id, item_serial_no, part_no, description, quantity, unit_price, currency, vat_rate, is_zero_rated, is_exempt, line_total, sort_order')
     .single();
 
   throwIfError(error);
