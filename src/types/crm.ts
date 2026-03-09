@@ -36,8 +36,10 @@ export type JobType = {
 
 export type SalesUser = {
   id: string;
-  display_name: string;
+  full_name: string;
   email: string | null;
+  job_title: string | null;
+  is_active: boolean;
 };
 
 export type EnquiryLine = {

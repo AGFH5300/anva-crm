@@ -60,19 +60,50 @@ const NewEnquiryPage = () => {
   const [customerOptions, setCustomerOptions] = useState<Array<{ id: string; name: string }>>([]);
   const [jobTypeOptions, setJobTypeOptions] = useState<JobType[]>([]);
   const [salesPicOptions, setSalesPicOptions] = useState<SalesUser[]>([]);
+  const [isLoadingCustomers, setIsLoadingCustomers] = useState(true);
+  const [isLoadingJobTypes, setIsLoadingJobTypes] = useState(true);
+  const [isLoadingSalesPeople, setIsLoadingSalesPeople] = useState(true);
+  const [customerLoadError, setCustomerLoadError] = useState<string | null>(null);
+  const [jobTypeLoadError, setJobTypeLoadError] = useState<string | null>(null);
+  const [salesPeopleLoadError, setSalesPeopleLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([listClients(), listActiveJobTypes(), listActiveSalesUsers()])
-      .then(([clients, jobTypes, salesUsers]) => {
+    setIsLoadingCustomers(true);
+    setIsLoadingJobTypes(true);
+    setIsLoadingSalesPeople(true);
+
+    listClients()
+      .then((clients) => {
         setCustomerOptions(clients);
-        setJobTypeOptions(jobTypes);
-        setSalesPicOptions(salesUsers);
+        setCustomerLoadError(null);
       })
-      .catch(() => {
+      .catch((err: Error) => {
         setCustomerOptions([]);
+        setCustomerLoadError(err.message);
+      })
+      .finally(() => setIsLoadingCustomers(false));
+
+    listActiveJobTypes()
+      .then((jobTypes) => {
+        setJobTypeOptions(jobTypes);
+        setJobTypeLoadError(null);
+      })
+      .catch((err: Error) => {
         setJobTypeOptions([]);
+        setJobTypeLoadError(err.message);
+      })
+      .finally(() => setIsLoadingJobTypes(false));
+
+    listActiveSalesUsers()
+      .then((salesUsers) => {
+        setSalesPicOptions(salesUsers);
+        setSalesPeopleLoadError(null);
+      })
+      .catch((err: Error) => {
         setSalesPicOptions([]);
-      });
+        setSalesPeopleLoadError(err.message);
+      })
+      .finally(() => setIsLoadingSalesPeople(false));
   }, []);
 
   const addItemLine = () => {
@@ -172,26 +203,39 @@ const NewEnquiryPage = () => {
             </option>
           ))}
         </select>
+        {isLoadingCustomers ? <p className="text-xs text-slate-500">Loading...</p> : null}
+        {!isLoadingCustomers && !customerLoadError && customerOptions.length === 0 ? <p className="text-xs text-slate-500">No records found</p> : null}
+        {customerLoadError ? <p className="text-xs text-red-600">{customerLoadError}</p> : null}
 
         <hr />
 
         <div className="grid gap-2 md:grid-cols-2">
-          <select value={summary.jobTypeId} onChange={(event) => updateSummary('jobTypeId', event.target.value)} className="rounded border p-2">
-            <option value="">Job Type (optional)</option>
-            {jobTypeOptions.map((jobType) => (
-              <option key={jobType.id} value={jobType.id}>
-                {jobType.name}
-              </option>
-            ))}
-          </select>
-          <select value={summary.salesPicUserId} onChange={(event) => updateSummary('salesPicUserId', event.target.value)} className="rounded border p-2">
-            <option value="">Sales PIC (optional)</option>
-            {salesPicOptions.map((user) => (
-              <option key={user.id} value={user.id}>
-                {user.display_name}{user.email ? ` (${user.email})` : ''}
-              </option>
-            ))}
-          </select>
+          <div>
+            <select value={summary.jobTypeId} onChange={(event) => updateSummary('jobTypeId', event.target.value)} className="w-full rounded border p-2">
+              <option value="">Job Type (optional)</option>
+              {jobTypeOptions.map((jobType) => (
+                <option key={jobType.id} value={jobType.id}>
+                  {jobType.name}
+                </option>
+              ))}
+            </select>
+            {isLoadingJobTypes ? <p className="mt-1 text-xs text-slate-500">Loading...</p> : null}
+            {!isLoadingJobTypes && !jobTypeLoadError && jobTypeOptions.length === 0 ? <p className="mt-1 text-xs text-slate-500">No records found</p> : null}
+            {jobTypeLoadError ? <p className="mt-1 text-xs text-red-600">{jobTypeLoadError}</p> : null}
+          </div>
+          <div>
+            <select value={summary.salesPicUserId} onChange={(event) => updateSummary('salesPicUserId', event.target.value)} className="w-full rounded border p-2">
+              <option value="">Sales PIC (optional)</option>
+              {salesPicOptions.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.full_name}{user.email ? ` (${user.email})` : ''}
+                </option>
+              ))}
+            </select>
+            {isLoadingSalesPeople ? <p className="mt-1 text-xs text-slate-500">Loading...</p> : null}
+            {!isLoadingSalesPeople && !salesPeopleLoadError && salesPicOptions.length === 0 ? <p className="mt-1 text-xs text-slate-500">No records found</p> : null}
+            {salesPeopleLoadError ? <p className="mt-1 text-xs text-red-600">{salesPeopleLoadError}</p> : null}
+          </div>
         </div>
 
         <div className="grid gap-2 md:grid-cols-2">

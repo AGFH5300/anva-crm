@@ -44,8 +44,10 @@ export const listClients = async () => {
   const { data, error } = await supabase
     .schema('crm')
     .from('clients')
-    .select('id, name')
-    .order('name');
+    .select('id,name,type,status,account_code')
+    .in('type', ['client', 'both'])
+    .eq('status', 'active')
+    .order('name', { ascending: true });
 
   if (error) {
     throw new Error(`Unable to read customers from crm.clients: ${error.message}`);
@@ -65,8 +67,7 @@ export const listActiveJobTypes = async () => {
     .from('job_types')
     .select('id, name, code, is_active, sort_order')
     .eq('is_active', true)
-    .order('sort_order', { ascending: true })
-    .order('name', { ascending: true });
+    .order('sort_order', { ascending: true });
 
   throwIfError(error);
   return (data ?? []) as JobType[];
@@ -75,7 +76,10 @@ export const listActiveJobTypes = async () => {
 export const listActiveSalesUsers = async () => {
   const { data, error } = await supabase
     .schema('crm')
-    .rpc('list_active_sales_users');
+    .from('sales_people')
+    .select('id,full_name,email,job_title,is_active')
+    .eq('is_active', true)
+    .order('full_name', { ascending: true });
 
   throwIfError(error);
   return (data ?? []) as SalesUser[];

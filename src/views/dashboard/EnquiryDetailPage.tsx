@@ -106,7 +106,7 @@ const EnquiryDetailPage = ({ id }: EnquiryDetailPageProps) => {
         <p><span className="font-medium">Client:</span> {enquiry.client_name || enquiry.client_id}</p>
         <p><span className="font-medium">PIC:</span> {enquiry.pic_name || '-'}{enquiry.pic_phone ? ` • ${enquiry.pic_phone}` : ''}{enquiry.pic_email ? ` • ${enquiry.pic_email}` : ''}</p>
         <p><span className="font-medium">Job Type:</span> {enquiry.job_type_name || '-'}</p>
-        <p><span className="font-medium">Sales PIC:</span> {salesPicOptions.find((user) => user.id === enquiry.sales_pic_user_id)?.display_name || '-'}</p>
+        <p><span className="font-medium">Sales PIC:</span> {salesPicOptions.find((user) => user.id === enquiry.sales_pic_user_id)?.full_name || '-'}</p>
         <p><span className="font-medium">Vessel:</span> {enquiry.vessel_name || '-'}</p>
         <p><span className="font-medium">IMO:</span> {enquiry.vessel_imo_number || '-'}</p>
         <p><span className="font-medium">Shipyard:</span> {enquiry.shipyard || '-'}</p>
@@ -129,7 +129,7 @@ const EnquiryDetailPage = ({ id }: EnquiryDetailPageProps) => {
           <option value="">Sales PIC (optional)</option>
           {salesPicOptions.map((user) => (
             <option key={user.id} value={user.id}>
-              {user.display_name}{user.email ? ` (${user.email})` : ''}
+              {user.full_name}{user.email ? ` (${user.email})` : ''}
             </option>
           ))}
         </select>
