@@ -257,8 +257,14 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
 
       <div className="rounded-xl border border-slate-200 bg-white p-4">
         <div className="mb-3 grid gap-2 md:grid-cols-4">
-          <input type="number" step="0.01" className="rounded border p-2" placeholder="Bulk margin %" value={bulkMarginPct} onChange={(e) => setBulkMarginPct(toNumber(e.target.value))} />
-          <input type="number" step="0.01" className="rounded border p-2" placeholder="Global discount %" value={globalDiscountPct} onChange={(e) => setGlobalDiscountPct(toNumber(e.target.value))} />
+          <label className="space-y-1 text-xs font-medium text-slate-600">
+            <span>Bulk margin %</span>
+            <input type="number" step="0.01" className="w-full rounded border p-2 text-sm" value={bulkMarginPct} onChange={(e) => setBulkMarginPct(toNumber(e.target.value))} />
+          </label>
+          <label className="space-y-1 text-xs font-medium text-slate-600">
+            <span>Global discount %</span>
+            <input type="number" step="0.01" className="w-full rounded border p-2 text-sm" value={globalDiscountPct} onChange={(e) => setGlobalDiscountPct(toNumber(e.target.value))} />
+          </label>
           <button type="button" className="rounded border px-2 py-1" onClick={onBulkApply}>Apply to all lines</button>
           <div className="relative">
             <button
@@ -289,18 +295,48 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
             <div key={line.id} className="space-y-2 border-b py-3 text-sm last:border-b-0">
               <p className="font-medium text-slate-900">{line.description}</p>
               <div className="grid gap-2 md:grid-cols-6">
-                <input type="number" step="0.001" className="rounded border p-2" value={editableLine.quantity} onChange={(event) => onChangePricing(line.id, 'quantity', event.target.value)} />
-                <input type="number" step="0.01" className="rounded border p-2" value={editableLine.supplier_cost} onChange={(event) => onChangePricing(line.id, 'supplier_cost', event.target.value)} placeholder="Supplier cost" />
-                <select className="rounded border p-2" value={editableLine.supplier_currency} onChange={(event) => onChangePricing(line.id, 'supplier_currency', event.target.value)}>
-                  <option value="AED">AED</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="GBP">GBP</option>
-                </select>
-                <input type="number" step="0.0001" className="rounded border p-2" value={editableLine.exchange_rate} onChange={(event) => onChangePricing(line.id, 'exchange_rate', event.target.value)} placeholder="FX" />
-                <input type="number" step="0.01" className="rounded border p-2" value={editableLine.landed_aed_cost} onChange={(event) => onChangePricing(line.id, 'landed_aed_cost', event.target.value)} placeholder="Landed AED" />
-                <input type="number" step="0.01" className="rounded border p-2" value={editableLine.margin_pct} onChange={(event) => onChangePricing(line.id, 'margin_pct', event.target.value)} placeholder="Margin %" />
-                <input type="number" step="0.01" className="rounded border p-2" value={editableLine.unit_price} onChange={(event) => onChangePricing(line.id, 'unit_price', event.target.value)} placeholder="Sell price" />
-                <input type="number" step="0.01" className="rounded border p-2" value={editableLine.discount_pct} onChange={(event) => onChangePricing(line.id, 'discount_pct', event.target.value)} placeholder="Discount %" />
-                <input type="number" step="0.01" className="rounded border p-2" value={editableLine.discount} onChange={(event) => onChangePricing(line.id, 'discount', event.target.value)} placeholder="Discount amount" />
-                <input type="number" step="0.01" className="rounded border p-2" value={editableLine.vat_rate} onChange={(event) => onChangePricing(line.id, 'vat_rate', event.target.value)} placeholder="VAT %" />
+                <label className="space-y-1 text-xs font-medium text-slate-600">
+                  <span>Quantity</span>
+                  <input type="number" step="0.001" className="w-full rounded border p-2 text-sm" value={editableLine.quantity} onChange={(event) => onChangePricing(line.id, 'quantity', event.target.value)} />
+                </label>
+                <label className="space-y-1 text-xs font-medium text-slate-600">
+                  <span>Supplier cost</span>
+                  <input type="number" step="0.01" className="w-full rounded border p-2 text-sm" value={editableLine.supplier_cost} onChange={(event) => onChangePricing(line.id, 'supplier_cost', event.target.value)} />
+                </label>
+                <label className="space-y-1 text-xs font-medium text-slate-600">
+                  <span>Supplier currency</span>
+                  <select className="w-full rounded border p-2 text-sm" value={editableLine.supplier_currency} onChange={(event) => onChangePricing(line.id, 'supplier_currency', event.target.value)}>
+                    <option value="AED">AED</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="GBP">GBP</option>
+                  </select>
+                </label>
+                <label className="space-y-1 text-xs font-medium text-slate-600">
+                  <span>Exchange rate (FX)</span>
+                  <input type="number" step="0.0001" className="w-full rounded border p-2 text-sm" value={editableLine.exchange_rate} onChange={(event) => onChangePricing(line.id, 'exchange_rate', event.target.value)} />
+                </label>
+                <label className="space-y-1 text-xs font-medium text-slate-600">
+                  <span>Landed AED cost</span>
+                  <input type="number" step="0.01" className="w-full rounded border p-2 text-sm" value={editableLine.landed_aed_cost} onChange={(event) => onChangePricing(line.id, 'landed_aed_cost', event.target.value)} />
+                </label>
+                <label className="space-y-1 text-xs font-medium text-slate-600">
+                  <span>Margin %</span>
+                  <input type="number" step="0.01" className="w-full rounded border p-2 text-sm" value={editableLine.margin_pct} onChange={(event) => onChangePricing(line.id, 'margin_pct', event.target.value)} />
+                </label>
+                <label className="space-y-1 text-xs font-medium text-slate-600">
+                  <span>Sell price</span>
+                  <input type="number" step="0.01" className="w-full rounded border p-2 text-sm" value={editableLine.unit_price} onChange={(event) => onChangePricing(line.id, 'unit_price', event.target.value)} />
+                </label>
+                <label className="space-y-1 text-xs font-medium text-slate-600">
+                  <span>Discount %</span>
+                  <input type="number" step="0.01" className="w-full rounded border p-2 text-sm" value={editableLine.discount_pct} onChange={(event) => onChangePricing(line.id, 'discount_pct', event.target.value)} />
+                </label>
+                <label className="space-y-1 text-xs font-medium text-slate-600">
+                  <span>Discount amount</span>
+                  <input type="number" step="0.01" className="w-full rounded border p-2 text-sm" value={editableLine.discount} onChange={(event) => onChangePricing(line.id, 'discount', event.target.value)} />
+                </label>
+                <label className="space-y-1 text-xs font-medium text-slate-600">
+                  <span>VAT %</span>
+                  <input type="number" step="0.01" className="w-full rounded border p-2 text-sm" value={editableLine.vat_rate} onChange={(event) => onChangePricing(line.id, 'vat_rate', event.target.value)} />
+                </label>
                 <p className="rounded border border-slate-200 bg-slate-50 p-2">Line total: {lineTotal.toFixed(2)}</p>
                 <button type="button" onClick={() => onDeleteLine(line.id)} className="rounded border border-red-200 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50">Delete</button>
               </div>
@@ -318,15 +354,15 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
       </div>
 
       <form onSubmit={onAddLine} className="grid gap-2 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-6">
-        <input name="description" className="rounded border p-2 md:col-span-2" placeholder="Description" required />
-        <input name="quantity" type="number" min="0.001" step="0.001" className="rounded border p-2" placeholder="Qty" required />
-        <input name="supplierCost" type="number" min="0" step="0.01" className="rounded border p-2" placeholder="Supplier cost" defaultValue="0" required />
-        <input name="exchangeRate" type="number" min="0.0001" step="0.0001" className="rounded border p-2" placeholder="FX" defaultValue="1" required />
-        <input name="landedAedCost" type="number" min="0" step="0.01" className="rounded border p-2" placeholder="Landed AED" defaultValue="0" required />
-        <input name="marginPct" type="number" min="0" step="0.01" className="rounded border p-2" placeholder="Margin %" defaultValue="0" required />
-        <input name="unitPrice" type="number" min="0" step="0.01" className="rounded border p-2" placeholder="Sell price" required />
-        <input name="discountPct" type="number" min="0" step="0.01" className="rounded border p-2" placeholder="Discount %" defaultValue="0" required />
-        <input name="discount" type="number" min="0" step="0.01" className="rounded border p-2" placeholder="Discount" defaultValue="0" required />
+        <label className="space-y-1 text-xs font-medium text-slate-600 md:col-span-2"><span>Description</span><input name="description" className="w-full rounded border p-2 text-sm" required /></label>
+        <label className="space-y-1 text-xs font-medium text-slate-600"><span>Quantity</span><input name="quantity" type="number" min="0.001" step="0.001" className="w-full rounded border p-2 text-sm" required /></label>
+        <label className="space-y-1 text-xs font-medium text-slate-600"><span>Supplier cost</span><input name="supplierCost" type="number" min="0" step="0.01" className="w-full rounded border p-2 text-sm" defaultValue="0" required /></label>
+        <label className="space-y-1 text-xs font-medium text-slate-600"><span>Exchange rate (FX)</span><input name="exchangeRate" type="number" min="0.0001" step="0.0001" className="w-full rounded border p-2 text-sm" defaultValue="1" required /></label>
+        <label className="space-y-1 text-xs font-medium text-slate-600"><span>Landed AED cost</span><input name="landedAedCost" type="number" min="0" step="0.01" className="w-full rounded border p-2 text-sm" defaultValue="0" required /></label>
+        <label className="space-y-1 text-xs font-medium text-slate-600"><span>Margin %</span><input name="marginPct" type="number" min="0" step="0.01" className="w-full rounded border p-2 text-sm" defaultValue="0" required /></label>
+        <label className="space-y-1 text-xs font-medium text-slate-600"><span>Sell price</span><input name="unitPrice" type="number" min="0" step="0.01" className="w-full rounded border p-2 text-sm" required /></label>
+        <label className="space-y-1 text-xs font-medium text-slate-600"><span>Discount %</span><input name="discountPct" type="number" min="0" step="0.01" className="w-full rounded border p-2 text-sm" defaultValue="0" required /></label>
+        <label className="space-y-1 text-xs font-medium text-slate-600"><span>Discount amount</span><input name="discount" type="number" min="0" step="0.01" className="w-full rounded border p-2 text-sm" defaultValue="0" required /></label>
         <button className="rounded-md bg-slate-800 px-3 py-2 text-sm font-medium text-white" type="submit">Add line</button>
         <input type="hidden" name="supplierCurrency" value="AED" />
         <input type="hidden" name="currency" value="AED" />
