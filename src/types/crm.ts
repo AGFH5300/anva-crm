@@ -83,7 +83,14 @@ export type Quotation = {
   payment_terms: string | null;
   parts_origin: string | null;
   parts_quality: string | null;
+  customer_reference: string | null;
+  customer_trn: string | null;
+  company_trn: string | null;
+  pic_details: string | null;
+  additional_notes: string | null;
   company_letterhead_enabled: boolean;
+  stamp_enabled: boolean;
+  signature_enabled: boolean;
   validity: string | null;
   created_at: string;
   enquiry?: Pick<Enquiry, 'id' | 'job_number' | 'vessel_name' | 'machinery_for' | 'machinery_make' | 'machinery_type' | 'machinery_serial_no'> | null;
@@ -174,4 +181,21 @@ export type SupplierRfqDocument = {
   generated_by: string | null;
   generated_at: string;
   notes: string | null;
+};
+
+export type CompanyDocumentSettings = {
+  id: string;
+  company_name: string;
+  company_trn: string | null;
+  default_payment_terms: string | null;
+  default_delivery_terms: string | null;
+  default_validity: string | null;
+  default_footer_text: string | null;
+  default_terms_and_conditions: string | null;
+  default_letterhead_enabled: boolean;
+  default_stamp_enabled: boolean;
+  default_signature_enabled: boolean;
+  logo_url: string | null;
+  stamp_url: string | null;
+  updated_at: string;
 };

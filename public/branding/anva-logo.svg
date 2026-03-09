@@ -1,0 +1,7 @@
+<svg width="240" height="230" viewBox="0 0 240 230" xmlns="http://www.w3.org/2000/svg">
+  <rect width="240" height="230" fill="#f3f4f6"/>
+  <polygon points="33,120 72,42 110,42 71,120" fill="#f8b400"/>
+  <polygon points="94,42 134,42 177,121 137,121" fill="#005370"/>
+  <polygon points="142,120 181,42 215,42 176,120" fill="#f8b400"/>
+  <text x="16" y="206" font-family="Arial Black, Arial, sans-serif" font-size="72" fill="#005370" font-weight="900">ANVA</text>
+</svg>

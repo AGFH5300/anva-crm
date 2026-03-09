@@ -10,7 +10,7 @@ import {
   type QuotationCommercialTermsInput,
   type QuotationLineInput
 } from '@/lib/crmValidation';
-import type { Enquiry, EnquiryLine, JobType, Quotation, QuotationLine, SalesOrder, SalesOrderLine, SalesUser, Supplier, SupplierRfqDocument } from '@/types/crm';
+import type { CompanyDocumentSettings, Enquiry, EnquiryLine, JobType, Quotation, QuotationLine, SalesOrder, SalesOrderLine, SalesUser, Supplier, SupplierRfqDocument } from '@/types/crm';
 
 const throwIfError = (error: PostgrestError | null) => {
   if (error) {
@@ -305,7 +305,7 @@ export const listQuotations = async () => {
   const { data, error } = await supabase
     .schema('crm')
     .from('quotations')
-    .select('id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, terms_and_conditions, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, company_letterhead_enabled, validity, created_at, client:clients(name)')
+    .select('id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, terms_and_conditions, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, customer_reference, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, validity, created_at, client:clients(name)')
     .order('created_at', { ascending: false });
 
   throwIfError(error);
@@ -320,7 +320,7 @@ export const getQuotationDetail = async (id: string) => {
     supabase
       .schema('crm')
       .from('quotations')
-      .select('id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, terms_and_conditions, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, company_letterhead_enabled, validity, created_at, client:clients(name), enquiry:enquiries(id,job_number,vessel_name,machinery_for,machinery_make,machinery_type,machinery_serial_no,job_type:job_types(name))')
+      .select('id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, terms_and_conditions, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, customer_reference, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, validity, created_at, client:clients(name), enquiry:enquiries(id,job_number,vessel_name,machinery_for,machinery_make,machinery_type,machinery_serial_no,job_type:job_types(name))')
       .eq('id', id)
       .single(),
     supabase
@@ -439,7 +439,14 @@ export const updateQuotationCommercialTerms = async (quotationId: string, payloa
       payment_terms: parsed.paymentTerms || null,
       parts_origin: parsed.partsOrigin || null,
       parts_quality: parsed.partsQuality || null,
+      customer_reference: parsed.customerReference || null,
+      customer_trn: parsed.customerTrn || null,
+      company_trn: parsed.companyTrn || null,
+      pic_details: parsed.picDetails || null,
+      additional_notes: parsed.additionalNotes || null,
       company_letterhead_enabled: parsed.companyLetterheadEnabled,
+      stamp_enabled: parsed.stampEnabled,
+      signature_enabled: parsed.signatureEnabled,
       validity: parsed.validity || null
     })
     .eq('id', quotationId);
@@ -702,4 +709,45 @@ export const uploadSupplierRfqPdf = async (payload: {
 
   if (error) throw new Error(error.message);
   return filePath;
+};
+
+
+export const getCompanyDocumentSettings = async () => {
+  const { data, error } = await supabase
+    .schema('crm')
+    .from('company_document_settings')
+    .select('id,company_name,company_trn,default_payment_terms,default_delivery_terms,default_validity,default_footer_text,default_terms_and_conditions,default_letterhead_enabled,default_stamp_enabled,default_signature_enabled,logo_url,stamp_url,updated_at')
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  throwIfError(error);
+  return (data ?? null) as CompanyDocumentSettings | null;
+};
+
+
+export const updateCompanyDocumentSettings = async (payload: Partial<CompanyDocumentSettings> & { id?: string }) => {
+  const { data, error } = await supabase
+    .schema('crm')
+    .from('company_document_settings')
+    .upsert({
+      id: payload.id,
+      company_name: payload.company_name,
+      company_trn: payload.company_trn ?? null,
+      default_payment_terms: payload.default_payment_terms ?? null,
+      default_delivery_terms: payload.default_delivery_terms ?? null,
+      default_validity: payload.default_validity ?? null,
+      default_footer_text: payload.default_footer_text ?? null,
+      default_terms_and_conditions: payload.default_terms_and_conditions ?? null,
+      default_letterhead_enabled: payload.default_letterhead_enabled ?? true,
+      default_stamp_enabled: payload.default_stamp_enabled ?? true,
+      default_signature_enabled: payload.default_signature_enabled ?? true,
+      logo_url: payload.logo_url ?? null,
+      stamp_url: payload.stamp_url ?? null
+    })
+    .select('id,company_name,company_trn,default_payment_terms,default_delivery_terms,default_validity,default_footer_text,default_terms_and_conditions,default_letterhead_enabled,default_stamp_enabled,default_signature_enabled,logo_url,stamp_url,updated_at')
+    .single();
+
+  throwIfError(error);
+  return data as CompanyDocumentSettings;
 };

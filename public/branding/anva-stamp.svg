@@ -1,0 +1,13 @@
+<svg width="890" height="900" viewBox="0 0 890 900" xmlns="http://www.w3.org/2000/svg">
+  <rect width="890" height="900" fill="#f3f4f6"/>
+  <circle cx="445" cy="445" r="385" fill="none" stroke="#005370" stroke-width="8"/>
+  <circle cx="445" cy="445" r="360" fill="none" stroke="#005370" stroke-width="3"/>
+
+  <polygon points="255,430 355,235 430,235 330,430" fill="none" stroke="#005370" stroke-width="4"/>
+  <polygon points="380,235 500,235 585,430 465,430" fill="#005370"/>
+  <polygon points="515,430 595,290 665,290 585,430" fill="none" stroke="#005370" stroke-width="4"/>
+
+  <text x="242" y="585" font-family="Arial Black, Arial, sans-serif" font-size="180" fill="#005370" font-weight="900">ANVA</text>
+  <text x="184" y="652" font-family="Arial, sans-serif" font-size="56" fill="#005370" font-weight="700">ADVANCED VENTURES NAUTICAL FZE</text>
+  <text x="186" y="715" font-family="Arial, sans-serif" font-size="66" fill="#005370" font-weight="700">ادفانسد نوتيكل فينتشرز م م ح</text>
+</svg>
