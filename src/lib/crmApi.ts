@@ -681,6 +681,92 @@ type SupplierInput = {
   notes?: string;
 };
 
+const MOCK_SUPPLIERS: Supplier[] = [
+  {
+    id: 'mock-supplier-001',
+    supplier_code: 'SUP-001',
+    company_name: 'ABC Marine Supplies LLC',
+    contact_person: 'Ahmed Khan',
+    email: 'sales@abcmarine.example',
+    phone: '+971500001001',
+    mobile: null,
+    website: null,
+    address_line_1: 'Al Quoz Industrial Area',
+    address_line_2: null,
+    city: 'Dubai',
+    state: null,
+    country: 'UAE',
+    postal_code: null,
+    tax_registration_no: null,
+    payment_terms: null,
+    currency: 'AED',
+    vendor_type: null,
+    notes: 'Mock supplier fallback',
+    created_at: new Date(0).toISOString(),
+    updated_at: new Date(0).toISOString()
+  },
+  {
+    id: 'mock-supplier-002',
+    supplier_code: 'SUP-002',
+    company_name: 'Gulf Engine Parts Trading',
+    contact_person: 'Fatima Noor',
+    email: 'quotes@gulfengineparts.example',
+    phone: '+971500001002',
+    mobile: null,
+    website: null,
+    address_line_1: 'Sharjah Industrial Area',
+    address_line_2: null,
+    city: 'Sharjah',
+    state: null,
+    country: 'UAE',
+    postal_code: null,
+    tax_registration_no: null,
+    payment_terms: null,
+    currency: 'AED',
+    vendor_type: null,
+    notes: 'Mock supplier fallback',
+    created_at: new Date(0).toISOString(),
+    updated_at: new Date(0).toISOString()
+  },
+  {
+    id: 'mock-supplier-003',
+    supplier_code: 'SUP-003',
+    company_name: 'Oceanic Ship Spares FZE',
+    contact_person: 'Ravi Menon',
+    email: 'rfq@oceanicspares.example',
+    phone: '+971500001003',
+    mobile: null,
+    website: null,
+    address_line_1: 'JAFZA South',
+    address_line_2: null,
+    city: 'Dubai',
+    state: null,
+    country: 'UAE',
+    postal_code: null,
+    tax_registration_no: null,
+    payment_terms: null,
+    currency: 'AED',
+    vendor_type: null,
+    notes: 'Mock supplier fallback',
+    created_at: new Date(0).toISOString(),
+    updated_at: new Date(0).toISOString()
+  }
+];
+
+const isMissingSuppliersTableError = (message: string) =>
+  message.includes("crm.suppliers") ||
+  message.toLowerCase().includes("relation \"crm.suppliers\" does not exist");
+
+const filterMockSuppliers = (search: string) => {
+  const query = search.trim().toLowerCase();
+  if (!query) return MOCK_SUPPLIERS;
+  return MOCK_SUPPLIERS.filter((supplier) =>
+    supplier.company_name.toLowerCase().includes(query) ||
+    (supplier.email ?? '').toLowerCase().includes(query) ||
+    (supplier.contact_person ?? '').toLowerCase().includes(query)
+  );
+};
+
 export const listSuppliers = async (search = '') => {
   let query = supabase
     .schema('crm')
@@ -694,7 +780,13 @@ export const listSuppliers = async (search = '') => {
   }
 
   const { data, error } = await query;
-  throwIfError(error);
+  if (error) {
+    if (isMissingSuppliersTableError(error.message)) {
+      return filterMockSuppliers(search);
+    }
+    throw new Error(error.message);
+  }
+
   return (data ?? []) as Supplier[];
 };
 
@@ -708,7 +800,18 @@ export const checkSupplierDuplicates = async (companyName: string, email?: strin
     .or(clauses.join(','))
     .limit(5);
 
-  throwIfError(error);
+  if (error) {
+    if (isMissingSuppliersTableError(error.message)) {
+      const mockMatches = filterMockSuppliers(companyName).filter((supplier) =>
+        supplier.company_name.toLowerCase() === companyName.trim().toLowerCase() ||
+        (!!email?.trim() && supplier.email?.toLowerCase() === email.trim().toLowerCase())
+      );
+
+      return mockMatches.map((supplier) => ({ id: supplier.id, company_name: supplier.company_name, email: supplier.email }));
+    }
+    throw new Error(error.message);
+  }
+
   return data ?? [];
 };
 

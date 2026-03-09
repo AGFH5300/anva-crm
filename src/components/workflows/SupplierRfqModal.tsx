@@ -109,21 +109,26 @@ const SupplierRfqModal = ({ enquiry, lines, onClose }: SupplierRfqModalProps) =>
       doc.text(DEFAULT_BRANDING.footerText, 40, Math.min(finalY + 68, 780));
 
       const blob = doc.output('blob');
-      const filePath = await uploadSupplierRfqPdf({ enquiryId: enquiry.id, supplierId: selectedSupplier.id, documentNumber, blob });
-
-      await upsertEnquirySupplierLink({ enquiryId: enquiry.id, supplier: selectedSupplier, status: 'generated' });
-      await createSupplierRfqDocumentLog({
-        enquiryId: enquiry.id,
-        supplierId: selectedSupplier.id,
-        documentNumber,
-        includeSerialNumber,
-        filePath,
-        selectedLineIds,
-        notes: 'Generated from enquiry RFQ modal'
-      });
-
       doc.save(`${documentNumber}.pdf`);
-      setMessage(`Supplier RFQ generated and logged: ${documentNumber}`);
+
+      try {
+        const filePath = await uploadSupplierRfqPdf({ enquiryId: enquiry.id, supplierId: selectedSupplier.id, documentNumber, blob });
+
+        await upsertEnquirySupplierLink({ enquiryId: enquiry.id, supplier: selectedSupplier, status: 'generated' });
+        await createSupplierRfqDocumentLog({
+          enquiryId: enquiry.id,
+          supplierId: selectedSupplier.id,
+          documentNumber,
+          includeSerialNumber,
+          filePath,
+          selectedLineIds,
+          notes: 'Generated from enquiry RFQ modal'
+        });
+
+        setMessage(`Supplier RFQ generated and logged: ${documentNumber}`);
+      } catch {
+        setMessage(`Supplier RFQ generated and downloaded: ${documentNumber} (saved locally only)`);
+      }
     } catch (err) {
       setError((err as Error).message);
     } finally {
