@@ -49,6 +49,11 @@ export type EnquiryLine = {
   enquiry_id: string;
   item_serial_no: string | null;
   part_no: string | null;
+  unit?: string | null;
+  drawing_reference?: string | null;
+  supplier_remarks?: string | null;
+  supplier_description_override?: string | null;
+  is_hidden_from_supplier_pdf?: boolean;
   description: string;
   quantity: number;
   unit_price: number;
@@ -123,4 +128,42 @@ export type SalesOrderLine = {
   is_exempt: boolean;
   line_total: number;
   sort_order: number;
+};
+
+
+export type Supplier = {
+  id: string;
+  supplier_code: string | null;
+  company_name: string;
+  contact_person: string | null;
+  email: string | null;
+  phone: string | null;
+  mobile: string | null;
+  website: string | null;
+  address_line_1: string | null;
+  address_line_2: string | null;
+  city: string | null;
+  state: string | null;
+  country: string | null;
+  postal_code: string | null;
+  tax_registration_no: string | null;
+  payment_terms: string | null;
+  currency: CurrencyCode;
+  vendor_type: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SupplierRfqDocument = {
+  id: string;
+  enquiry_id: string;
+  supplier_id: string;
+  document_type: 'supplier_rfq_pdf';
+  document_number: string;
+  include_serial_number: boolean;
+  file_path: string;
+  generated_by: string | null;
+  generated_at: string;
+  notes: string | null;
 };

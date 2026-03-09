@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { addEnquiryLine, convertEnquiryToQuotationDraft, deleteEnquiryLine, getEnquiryDetail, getQuotationDetail, listActiveJobTypes, listActiveSalesUsers, updateEnquiry } from '@/lib/crmApi';
 import type { Enquiry, EnquiryLine, JobType, SalesUser } from '@/types/crm';
 import { formatIsoDate } from '@/utils/date';
+import SupplierRfqModal from '@/components/workflows/SupplierRfqModal';
 
 type EnquiryDetailPageProps = {
   id: string;
@@ -18,6 +19,7 @@ const EnquiryDetailPage = ({ id }: EnquiryDetailPageProps) => {
   const searchParams = useSearchParams();
   const [jobTypeOptions, setJobTypeOptions] = useState<JobType[]>([]);
   const [salesPicOptions, setSalesPicOptions] = useState<SalesUser[]>([]);
+  const [rfqOpen, setRfqOpen] = useState(false);
 
   const load = () => getEnquiryDetail(id).then(({ enquiry, lines }) => { setEnquiry(enquiry); setLines(lines); });
 
@@ -118,7 +120,10 @@ const EnquiryDetailPage = ({ id }: EnquiryDetailPageProps) => {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-slate-900">Enquiry {enquiry.job_number}</h1>
-        <button type="button" onClick={onConvert} className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-white">Convert to quotation draft</button>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => setRfqOpen(true)} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium">Generate Supplier RFQ PDF</button>
+          <button type="button" onClick={onConvert} className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-white">Convert to quotation draft</button>
+        </div>
       </div>
       {searchParams.get('created') === '1' ? <p className="text-sm font-medium text-emerald-700">Enquiry created successfully: {enquiry.job_number}</p> : null}
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
@@ -187,6 +192,8 @@ const EnquiryDetailPage = ({ id }: EnquiryDetailPageProps) => {
           </div>
         ))}
       </div>
+
+      {rfqOpen && enquiry ? <SupplierRfqModal enquiry={enquiry} lines={lines} onClose={() => setRfqOpen(false)} /> : null}
       <form onSubmit={onAddLine} className="grid gap-2 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-6">
         <input name="itemSerialNo" className="rounded border p-2" placeholder="Item serial no" />
         <input name="partNo" className="rounded border p-2" placeholder="Part no" />
