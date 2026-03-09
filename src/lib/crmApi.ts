@@ -10,7 +10,7 @@ import {
   type QuotationCommercialTermsInput,
   type QuotationLineInput
 } from '@/lib/crmValidation';
-import type { CompanyDocumentSettings, Enquiry, EnquiryLine, JobType, Quotation, QuotationLine, SalesOrder, SalesOrderLine, SalesUser, Supplier, SupplierRfqDocument } from '@/types/crm';
+import type { CompanyDocumentSettings, Enquiry, EnquiryLine, Invoice, JobType, Quotation, QuotationLine, SalesOrder, SalesOrderLine, SalesUser, Supplier, SupplierRfqDocument } from '@/types/crm';
 
 const throwIfError = (error: PostgrestError | null) => {
   if (error) {
@@ -110,6 +110,7 @@ export const listEnquiries = async () => {
       .schema('crm')
       .from('enquiries')
       .select('id, job_number, enquiry_date, client_id, contact_id, job_type_id, sales_pic_user_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at, client:clients(name), job_type:job_types(name)')
+      .not('status', 'in', '(won,lost)')
       .order('enquiry_date', { ascending: false })
       .order('created_at', { ascending: false });
 
@@ -311,6 +312,14 @@ export const convertEnquiryToQuotationDraft = async (enquiryId: string) => {
 
   throwIfError(syncError);
 
+  const { error: enquiryStatusError } = await supabase
+    .schema('crm')
+    .from('enquiries')
+    .update({ status: 'won' })
+    .eq('id', enquiryId);
+
+  throwIfError(enquiryStatusError);
+
   return data as string;
 };
 
@@ -325,6 +334,7 @@ export const listQuotations = async () => {
     .schema('crm')
     .from('quotations')
     .select(primarySelect)
+    .in('status', ['draft', 'sent'])
     .order('created_at', { ascending: false }));
 
   if (error?.code === '42703' && error.message.includes('terms_and_conditions')) {
@@ -332,6 +342,7 @@ export const listQuotations = async () => {
       .schema('crm')
       .from('quotations')
       .select(fallbackSelect)
+      .in('status', ['draft', 'sent'])
       .order('created_at', { ascending: false }));
   }
 
@@ -598,10 +609,20 @@ export const deleteQuotationLine = async (quotationId: string, lineId: string) =
 };
 
 export const convertQuotationToSalesOrder = async (quotationId: string) => {
-  return callFirstAvailableRpc<string>(
+  const salesOrderId = await callFirstAvailableRpc<string>(
     ['convert_quotation_to_sales_order', 'crm_convert_quotation_to_sales_order'],
     { p_quotation_id: quotationId }
   );
+
+  const { error } = await supabase
+    .schema('crm')
+    .from('quotations')
+    .update({ status: 'accepted' })
+    .eq('id', quotationId);
+
+  throwIfError(error);
+
+  return salesOrderId;
 };
 
 export const getSalesOrderDetail = async (id: string) => {
@@ -863,6 +884,94 @@ export const uploadSupplierRfqPdf = async (payload: {
   return filePath;
 };
 
+
+
+
+export type DashboardStageCounts = {
+  enquiries: number;
+  quotations: number;
+  saleOrders: number;
+  invoices: number;
+};
+
+export const getDashboardStageCounts = async (): Promise<DashboardStageCounts> => {
+  const rpc = await supabase.schema('crm').rpc('crm_get_dashboard_stage_counts');
+  if (!rpc.error && rpc.data) {
+    const row = Array.isArray(rpc.data) ? rpc.data[0] : rpc.data;
+    return {
+      enquiries: Number(row.enquiries ?? 0),
+      quotations: Number(row.quotations ?? 0),
+      saleOrders: Number(row.sale_orders ?? row.saleOrders ?? 0),
+      invoices: Number(row.invoices ?? 0)
+    };
+  }
+
+  const [enquiries, quotations, saleOrders, invoices] = await Promise.all([
+    supabase.schema('crm').from('enquiries').select('id', { count: 'exact', head: true }).not('status', 'in', '(won,lost)'),
+    supabase.schema('crm').from('quotations').select('id', { count: 'exact', head: true }).in('status', ['draft', 'sent']),
+    supabase.schema('crm').from('sales_orders').select('id', { count: 'exact', head: true }).in('status', ['draft', 'confirmed', 'in-progress']),
+    supabase.schema('crm').from('invoices').select('id', { count: 'exact', head: true }).in('status', ['draft', 'issued', 'overdue'])
+  ]);
+
+  throwIfError(enquiries.error);
+  throwIfError(quotations.error);
+  throwIfError(saleOrders.error);
+  throwIfError(invoices.error);
+
+  return {
+    enquiries: enquiries.count ?? 0,
+    quotations: quotations.count ?? 0,
+    saleOrders: saleOrders.count ?? 0,
+    invoices: invoices.count ?? 0
+  };
+};
+
+export const listSalesOrders = async () => {
+  const { data, error } = await supabase
+    .schema('crm')
+    .from('sales_orders')
+    .select('id, quotation_id, client_id, document_number, status, issue_date, currency, subtotal, vat_amount, total, created_at, client:clients(name)')
+    .in('status', ['draft', 'confirmed', 'in-progress'])
+    .order('created_at', { ascending: false });
+
+  throwIfError(error);
+  return ((data ?? []) as Array<SalesOrder & { client?: { name: string | null } | Array<{ name: string | null }> | null }>).map(({ client, ...item }) => ({
+    ...item,
+    client_name: getRelationName(client) ?? null
+  }));
+};
+
+export const listInvoices = async () => {
+  const { data, error } = await supabase
+    .schema('crm')
+    .from('invoices')
+    .select('id, sales_order_id, client_id, document_number, status, issue_date, due_date, currency, total, balance_due, created_at, client:clients(name)')
+    .in('status', ['draft', 'issued', 'overdue'])
+    .order('created_at', { ascending: false });
+
+  throwIfError(error);
+  return ((data ?? []) as Array<Invoice & { client?: { name: string | null } | Array<{ name: string | null }> | null }>).map(({ client, ...item }) => ({
+    ...item,
+    client_name: getRelationName(client) ?? null
+  }));
+};
+
+export const convertSalesOrderToInvoice = async (salesOrderId: string) => {
+  const invoiceId = await callFirstAvailableRpc<string>(
+    ['convert_sales_order_to_invoice', 'crm_convert_sales_order_to_invoice'],
+    { p_sales_order_id: salesOrderId }
+  );
+
+  const { error } = await supabase
+    .schema('crm')
+    .from('sales_orders')
+    .update({ status: 'fulfilled' })
+    .eq('id', salesOrderId);
+
+  throwIfError(error);
+
+  return invoiceId;
+};
 
 export const getCompanyDocumentSettings = async () => {
   const { data, error } = await supabase
