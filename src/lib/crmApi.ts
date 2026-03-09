@@ -40,6 +40,14 @@ const getRelationName = (value: { name: string | null } | Array<{ name: string |
   if (!value) return null;
   return Array.isArray(value) ? value[0]?.name ?? null : value.name ?? null;
 };
+
+
+const getDiscountAmount = (baseAmount: number, discountPct: number, discountAmount: number) => {
+  const pctAmount = baseAmount * (discountPct / 100);
+  if (discountAmount > 0) return Math.min(baseAmount, discountAmount);
+  return Math.min(baseAmount, pctAmount);
+};
+
 export const listClients = async () => {
   const { data, error } = await supabase
     .schema('crm')
@@ -316,7 +324,7 @@ export const getQuotationDetail = async (id: string) => {
     supabase
       .schema('crm')
       .from('quotation_items')
-      .select('id, quotation_id, description, quantity, unit_price, currency, vat_rate, is_zero_rated, is_exempt, discount, line_total, sort_order')
+      .select('id, quotation_id, description, quantity, supplier_cost, supplier_currency, exchange_rate, landed_aed_cost, margin_pct, unit_price, currency, discount_pct, vat_rate, is_zero_rated, is_exempt, discount, line_total, sort_order')
       .eq('quotation_id', id)
       .order('sort_order')
   ]);
@@ -371,7 +379,11 @@ export const getQuotationDetail = async (id: string) => {
 
 export const addQuotationLine = async (quotationId: string, payload: QuotationLineInput) => {
   const parsed = quotationLineSchema.parse(payload);
-  const lineTotal = Number((parsed.quantity * parsed.unitPrice - parsed.discount).toFixed(2));
+  const baseAmount = parsed.quantity * parsed.unitPrice;
+  const discountAmount = getDiscountAmount(baseAmount, parsed.discountPct, parsed.discount);
+  const discountedBase = Math.max(0, baseAmount - discountAmount);
+  const lineVat = discountedBase * (parsed.vatRate / 100);
+  const lineTotal = Number((discountedBase + lineVat).toFixed(2));
 
   const { data: latest } = await supabase
     .schema('crm')
@@ -389,16 +401,22 @@ export const addQuotationLine = async (quotationId: string, payload: QuotationLi
       quotation_id: quotationId,
       description: parsed.description,
       quantity: parsed.quantity,
+      supplier_cost: parsed.supplierCost,
+      supplier_currency: parsed.supplierCurrency,
+      exchange_rate: parsed.exchangeRate,
+      landed_aed_cost: parsed.landedAedCost,
+      margin_pct: parsed.marginPct,
       unit_price: parsed.unitPrice,
       currency: parsed.currency,
       vat_rate: parsed.vatRate,
       is_zero_rated: parsed.isZeroRated,
       is_exempt: parsed.isExempt,
+      discount_pct: parsed.discountPct,
       discount: parsed.discount,
       line_total: lineTotal,
       sort_order: (latest?.sort_order ?? 0) + 1
     })
-    .select('id, quotation_id, description, quantity, unit_price, currency, vat_rate, is_zero_rated, is_exempt, discount, line_total, sort_order')
+    .select('id, quotation_id, description, quantity, supplier_cost, supplier_currency, exchange_rate, landed_aed_cost, margin_pct, unit_price, currency, discount_pct, vat_rate, is_zero_rated, is_exempt, discount, line_total, sort_order')
     .single();
 
   throwIfError(error);
@@ -410,7 +428,7 @@ const recalculateQuotationTotals = async (quotationId: string) => {
   const { data: lines, error: linesError } = await supabase
     .schema('crm')
     .from('quotation_items')
-    .select('quantity, unit_price, discount, vat_rate')
+    .select('quantity, unit_price, discount, discount_pct, vat_rate')
     .eq('quotation_id', quotationId);
 
   throwIfError(linesError);
@@ -418,7 +436,8 @@ const recalculateQuotationTotals = async (quotationId: string) => {
   const computed = (lines ?? []).reduce(
     (acc, line) => {
       const baseAmount = Number(line.quantity) * Number(line.unit_price);
-      const discountedBase = Math.max(0, baseAmount - Number(line.discount ?? 0));
+      const discountAmount = getDiscountAmount(baseAmount, Number(line.discount_pct ?? 0), Number(line.discount ?? 0));
+      const discountedBase = Math.max(0, baseAmount - discountAmount);
       const lineVat = discountedBase * (Number(line.vat_rate ?? 0) / 100);
 
       return {
@@ -444,14 +463,21 @@ const recalculateQuotationTotals = async (quotationId: string) => {
 
 export const updateQuotationLines = async (
   quotationId: string,
-  payload: Array<Pick<QuotationLine, 'id' | 'quantity' | 'unit_price' | 'discount' | 'vat_rate'>>
+  payload: Array<Pick<QuotationLine, 'id' | 'quantity' | 'supplier_cost' | 'supplier_currency' | 'exchange_rate' | 'landed_aed_cost' | 'margin_pct' | 'unit_price' | 'discount_pct' | 'discount' | 'vat_rate'>>
 ) => {
   for (const line of payload) {
     const quantity = Number(line.quantity);
+    const supplierCost = Number(line.supplier_cost ?? 0);
+    const exchangeRate = Number(line.exchange_rate ?? 1);
+    const landedAedCost = Number(line.landed_aed_cost ?? 0);
+    const marginPct = Number(line.margin_pct ?? 0);
     const unitPrice = Number(line.unit_price);
+    const discountPct = Number(line.discount_pct ?? 0);
     const discount = Number(line.discount ?? 0);
     const vatRate = Number(line.vat_rate ?? 0);
-    const discountedBase = Math.max(0, quantity * unitPrice - discount);
+    const baseAmount = quantity * unitPrice;
+    const discountAmount = getDiscountAmount(baseAmount, discountPct, discount);
+    const discountedBase = Math.max(0, baseAmount - discountAmount);
     const lineVat = discountedBase * (vatRate / 100);
     const lineTotal = Number((discountedBase + lineVat).toFixed(2));
 
@@ -460,7 +486,13 @@ export const updateQuotationLines = async (
       .from('quotation_items')
       .update({
         quantity,
+        supplier_cost: supplierCost,
+        supplier_currency: line.supplier_currency ?? 'AED',
+        exchange_rate: exchangeRate,
+        landed_aed_cost: landedAedCost,
+        margin_pct: marginPct,
         unit_price: unitPrice,
+        discount_pct: discountPct,
         discount,
         vat_rate: vatRate,
         line_total: lineTotal
