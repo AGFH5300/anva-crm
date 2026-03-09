@@ -16,7 +16,7 @@ const EnquiriesListPage = () => {
         setRows(enquiries);
         setSalesPicById(
           users.reduce<Record<string, string>>((acc, user) => {
-            acc[user.id] = user.display_name;
+            acc[user.id] = user.full_name;
             return acc;
           }, {})
         );
