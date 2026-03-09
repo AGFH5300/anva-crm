@@ -15,17 +15,35 @@ const EnquiryDetailPage = ({ id }: EnquiryDetailPageProps) => {
   const [enquiry, setEnquiry] = useState<Enquiry | null>(null);
   const [lines, setLines] = useState<EnquiryLine[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
   const searchParams = useSearchParams();
   const [jobTypeOptions, setJobTypeOptions] = useState<JobType[]>([]);
   const [salesPicOptions, setSalesPicOptions] = useState<SalesUser[]>([]);
   const [rfqOpen, setRfqOpen] = useState(false);
 
-  const load = () => getEnquiryDetail(id).then(({ enquiry, lines }) => { setEnquiry(enquiry); setLines(lines); });
+  const load = async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const { enquiry, lines } = await getEnquiryDetail(id);
+      setEnquiry(enquiry);
+      setLines(lines);
+    } catch (err) {
+      setEnquiry(null);
+      setLines([]);
+      setError((err as Error).message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    Promise.all([load(), listActiveJobTypes(), listActiveSalesUsers()])
-      .then(([, jobTypes, salesUsers]) => {
+    load();
+
+    Promise.all([listActiveJobTypes(), listActiveSalesUsers()])
+      .then(([jobTypes, salesUsers]) => {
         setJobTypeOptions(jobTypes);
         setSalesPicOptions(salesUsers);
       })
@@ -114,7 +132,18 @@ const EnquiryDetailPage = ({ id }: EnquiryDetailPageProps) => {
     }
   };
 
-  if (!enquiry) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (isLoading) return <p className="text-sm text-slate-500">Loading…</p>;
+
+  if (!enquiry) {
+    return (
+      <div className="space-y-2">
+        <p className="text-sm text-red-600">{error ?? 'Unable to load enquiry details.'}</p>
+        <button type="button" onClick={() => load()} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium">
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
