@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { addQuotationLine, convertQuotationToSalesOrder, deleteQuotationLine, getQuotationDetail, updateQuotationCommercialTerms, updateQuotationLines } from '@/lib/crmApi';
 import type { CurrencyCode, Quotation, QuotationLine } from '@/types/crm';
+import { DOCUMENT_TEMPLATE_CONFIG } from '@/config/documentTemplateConfig';
+import { renderAnvaDocumentHtml } from '@/services/documents/anvaDocumentTemplate';
 
 type QuotationDetailPageProps = {
   id: string;
@@ -32,6 +34,13 @@ type CommercialTermsForm = {
   partsOrigin: string;
   partsQuality: string;
   companyLetterheadEnabled: boolean;
+  stampEnabled: boolean;
+  signatureEnabled: boolean;
+  customerReference: string;
+  customerTrn: string;
+  companyTrn: string;
+  picDetails: string;
+  additionalNotes: string;
   validity: string;
 };
 
@@ -52,7 +61,14 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
     paymentTerms: '',
     partsOrigin: '',
     partsQuality: '',
-    companyLetterheadEnabled: false,
+    companyLetterheadEnabled: true,
+    stampEnabled: true,
+    signatureEnabled: false,
+    customerReference: '',
+    customerTrn: '',
+    companyTrn: '',
+    picDetails: '',
+    additionalNotes: '',
     validity: ''
   });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -82,7 +98,14 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
       paymentTerms: quotation.payment_terms ?? '',
       partsOrigin: quotation.parts_origin ?? '',
       partsQuality: quotation.parts_quality ?? '',
-      companyLetterheadEnabled: quotation.company_letterhead_enabled ?? false,
+      companyLetterheadEnabled: quotation.letterhead_enabled ?? quotation.company_letterhead_enabled ?? true,
+      stampEnabled: quotation.stamp_enabled ?? true,
+      signatureEnabled: quotation.signature_enabled ?? false,
+      customerReference: quotation.customer_reference ?? '',
+      customerTrn: quotation.customer_trn ?? '',
+      companyTrn: quotation.company_trn ?? '',
+      picDetails: quotation.pic_details ?? '',
+      additionalNotes: quotation.additional_notes ?? '',
       validity: quotation.validity ?? ''
     });
   });
@@ -249,35 +272,61 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
 
   const onClientPdf = () => {
     if (!quotation) return;
-    const linesHtml = editableLines.map((line) => {
-      const base = line.quantity * line.unit_price;
-      const discount = line.discount > 0 ? line.discount : base * (line.discount_pct / 100);
-      const taxable = Math.max(0, base - discount);
-      const vat = taxable * (line.vat_rate / 100);
-      const total = taxable + vat;
-      return `<tr><td>${line.description}</td><td>${line.quantity}</td><td>${line.unit_price.toFixed(2)}</td><td>${discount.toFixed(2)}</td><td>${line.vat_rate.toFixed(2)}%</td><td>${total.toFixed(2)}</td></tr>`;
-    }).join('');
     const printable = window.open('', '_blank', 'width=900,height=700');
     if (!printable) return;
-    const mustShowCommercialFields = [
-      ['Delivery Terms', commercialTerms.deliveryTerms],
-      ['Payment Terms', commercialTerms.paymentTerms],
-      ['Validity', commercialTerms.validity],
-      ['Delivery Time', commercialTerms.deliveryTime],
-      ['Parts Origin', commercialTerms.partsOrigin],
-      ['Parts Quality', commercialTerms.partsQuality]
-    ].filter(([label, value]) => Boolean(value) || ['Delivery Terms', 'Payment Terms', 'Validity'].includes(label));
-    const commercialRows = mustShowCommercialFields
-      .map(([label, value]) => `<tr><td style="padding:6px;border:1px solid #cbd5e1;font-weight:600;">${label}</td><td style="padding:6px;border:1px solid #cbd5e1;">${value || '-'}</td></tr>`)
-      .join('');
-    const letterheadStyle = commercialTerms.companyLetterheadEnabled
-      ? '<div style="border-bottom:2px solid #0f172a;padding-bottom:10px;margin-bottom:16px;"><h2 style="margin:0;">ANVA Marine & Industrial Supplies</h2><p style="margin:2px 0 0;">Office 1204, Dubai, UAE · +971 00 000 0000 · sales@anva.example</p></div>'
-      : '';
-    const termsBlock = commercialTerms.termsAndConditions
-      ? `<h3 style="margin-top:18px;">Terms & Conditions</h3><p style="white-space:pre-wrap;line-height:1.4;">${commercialTerms.termsAndConditions}</p>`
-      : '';
 
-    printable.document.write(`<html><body style="font-family:Arial,sans-serif;color:#0f172a;">${letterheadStyle}<h1>Quotation ${quotation.document_number}</h1><table border="1" cellspacing="0" cellpadding="6"><thead><tr><th>Description</th><th>Qty</th><th>Unit Price</th><th>Discount</th><th>VAT</th><th>Line Total</th></tr></thead><tbody>${linesHtml}</tbody></table><p>Subtotal: ${liveTotals.subtotal.toFixed(2)}</p><p>VAT: ${liveTotals.vat.toFixed(2)}</p><p><strong>Grand Total: ${liveTotals.total.toFixed(2)}</strong></p><h3>Commercial Terms</h3><table style="border-collapse:collapse;width:100%;">${commercialRows}</table>${termsBlock}</body></html>`);
+    const html = renderAnvaDocumentHtml({
+      kind: 'quotation',
+      config: DOCUMENT_TEMPLATE_CONFIG.quotation,
+      documentNumber: quotation.document_number,
+      issueDate: new Date().toISOString().slice(0, 10),
+      recipientName: quotation.client_name ?? '',
+      meta: {
+        customer_reference: commercialTerms.customerReference,
+        validity: commercialTerms.validity,
+        customer_trn: commercialTerms.customerTrn,
+        company_trn: commercialTerms.companyTrn,
+        pic_details: commercialTerms.picDetails
+      },
+      rows: editableLines.map((line, index) => {
+        const base = line.quantity * line.unit_price;
+        const discount = line.discount > 0 ? line.discount : base * (line.discount_pct / 100);
+        const taxable = Math.max(0, base - discount);
+        const vat = taxable * (line.vat_rate / 100);
+        return {
+          serial: String(index + 1),
+          partNumber: '-',
+          description: line.description,
+          quantity: line.quantity.toFixed(2),
+          unitPrice: line.unit_price.toFixed(2),
+          discount: discount.toFixed(2),
+          netPrice: taxable.toFixed(2),
+          vat: line.vat_rate.toFixed(2),
+          totalPrice: (taxable + vat).toFixed(2)
+        };
+      }),
+      totals: {
+        subtotal: liveTotals.subtotal.toFixed(2),
+        vatAmount: liveTotals.vat.toFixed(2),
+        grandTotal: liveTotals.total.toFixed(2)
+      },
+      terms: {
+        payment_terms: commercialTerms.paymentTerms,
+        delivery_terms: commercialTerms.deliveryTerms,
+        delivery_time: commercialTerms.deliveryTime,
+        parts_origin: commercialTerms.partsOrigin,
+        parts_quality: commercialTerms.partsQuality,
+        terms_and_conditions: commercialTerms.termsAndConditions,
+        additional_notes: commercialTerms.additionalNotes
+      },
+      letterheadEnabled: commercialTerms.companyLetterheadEnabled,
+      stampEnabled: commercialTerms.stampEnabled,
+      signatureEnabled: commercialTerms.signatureEnabled,
+      logoPath: '/branding/anva-logo.svg',
+      stampPath: '/branding/anva-stamp.svg'
+    });
+
+    printable.document.write(html);
     printable.document.close();
     printable.print();
   };
@@ -341,11 +390,24 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
           </label>
           <label className="space-y-1 text-xs font-medium text-slate-600"><span>Delivery Time</span><input className="w-full rounded border p-2 text-sm" value={commercialTerms.deliveryTime} onChange={(event) => setCommercialTerms((prev) => ({ ...prev, deliveryTime: event.target.value }))} /></label>
           <label className="space-y-1 text-xs font-medium text-slate-600"><span>Validity</span><input className="w-full rounded border p-2 text-sm" value={commercialTerms.validity} onChange={(event) => setCommercialTerms((prev) => ({ ...prev, validity: event.target.value }))} /></label>
+          <label className="space-y-1 text-xs font-medium text-slate-600"><span>Customer Reference</span><input className="w-full rounded border p-2 text-sm" value={commercialTerms.customerReference} onChange={(event) => setCommercialTerms((prev) => ({ ...prev, customerReference: event.target.value }))} /></label>
+          <label className="space-y-1 text-xs font-medium text-slate-600"><span>Customer TRN</span><input className="w-full rounded border p-2 text-sm" value={commercialTerms.customerTrn} onChange={(event) => setCommercialTerms((prev) => ({ ...prev, customerTrn: event.target.value }))} /></label>
+          <label className="space-y-1 text-xs font-medium text-slate-600"><span>Company TRN</span><input className="w-full rounded border p-2 text-sm" value={commercialTerms.companyTrn} onChange={(event) => setCommercialTerms((prev) => ({ ...prev, companyTrn: event.target.value }))} /></label>
+          <label className="space-y-1 text-xs font-medium text-slate-600 md:col-span-2"><span>PIC Details</span><input className="w-full rounded border p-2 text-sm" value={commercialTerms.picDetails} onChange={(event) => setCommercialTerms((prev) => ({ ...prev, picDetails: event.target.value }))} /></label>
+          <label className="space-y-1 text-xs font-medium text-slate-600 md:col-span-2"><span>Additional Notes</span><textarea className="min-h-20 w-full rounded border p-2 text-sm" value={commercialTerms.additionalNotes} onChange={(event) => setCommercialTerms((prev) => ({ ...prev, additionalNotes: event.target.value }))} /></label>
           <label className="space-y-1 text-xs font-medium text-slate-600"><span>Parts Origin</span><input className="w-full rounded border p-2 text-sm" value={commercialTerms.partsOrigin} onChange={(event) => setCommercialTerms((prev) => ({ ...prev, partsOrigin: event.target.value }))} /></label>
           <label className="space-y-1 text-xs font-medium text-slate-600"><span>Parts Quality</span><input className="w-full rounded border p-2 text-sm" value={commercialTerms.partsQuality} onChange={(event) => setCommercialTerms((prev) => ({ ...prev, partsQuality: event.target.value }))} /></label>
           <label className="flex items-center gap-2 text-xs font-medium text-slate-600 md:col-span-2">
             <input type="checkbox" checked={commercialTerms.companyLetterheadEnabled} onChange={(event) => setCommercialTerms((prev) => ({ ...prev, companyLetterheadEnabled: event.target.checked }))} />
             <span>Use company letterhead for print/PDF output</span>
+          </label>
+          <label className="flex items-center gap-2 text-xs font-medium text-slate-600 md:col-span-2">
+            <input type="checkbox" checked={commercialTerms.stampEnabled} onChange={(event) => setCommercialTerms((prev) => ({ ...prev, stampEnabled: event.target.checked }))} />
+            <span>Show company stamp</span>
+          </label>
+          <label className="flex items-center gap-2 text-xs font-medium text-slate-600 md:col-span-2">
+            <input type="checkbox" checked={commercialTerms.signatureEnabled} onChange={(event) => setCommercialTerms((prev) => ({ ...prev, signatureEnabled: event.target.checked }))} />
+            <span>Show signature block</span>
           </label>
         </div>
       </div>

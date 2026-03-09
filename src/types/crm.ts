@@ -84,6 +84,14 @@ export type Quotation = {
   parts_origin: string | null;
   parts_quality: string | null;
   company_letterhead_enabled: boolean;
+  letterhead_enabled: boolean;
+  stamp_enabled: boolean;
+  signature_enabled: boolean;
+  customer_reference: string | null;
+  customer_trn: string | null;
+  company_trn: string | null;
+  pic_details: string | null;
+  additional_notes: string | null;
   validity: string | null;
   created_at: string;
   enquiry?: Pick<Enquiry, 'id' | 'job_number' | 'vessel_name' | 'machinery_for' | 'machinery_make' | 'machinery_type' | 'machinery_serial_no'> | null;

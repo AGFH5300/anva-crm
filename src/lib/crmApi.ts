@@ -305,7 +305,7 @@ export const listQuotations = async () => {
   const { data, error } = await supabase
     .schema('crm')
     .from('quotations')
-    .select('id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, terms_and_conditions, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, company_letterhead_enabled, validity, created_at, client:clients(name)')
+    .select('id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, terms_and_conditions, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, company_letterhead_enabled, letterhead_enabled, stamp_enabled, signature_enabled, customer_reference, customer_trn, company_trn, pic_details, additional_notes, validity, created_at, client:clients(name)')
     .order('created_at', { ascending: false });
 
   throwIfError(error);
@@ -320,7 +320,7 @@ export const getQuotationDetail = async (id: string) => {
     supabase
       .schema('crm')
       .from('quotations')
-      .select('id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, terms_and_conditions, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, company_letterhead_enabled, validity, created_at, client:clients(name), enquiry:enquiries(id,job_number,vessel_name,machinery_for,machinery_make,machinery_type,machinery_serial_no,job_type:job_types(name))')
+      .select('id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, terms_and_conditions, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, company_letterhead_enabled, letterhead_enabled, stamp_enabled, signature_enabled, customer_reference, customer_trn, company_trn, pic_details, additional_notes, validity, created_at, client:clients(name), enquiry:enquiries(id,job_number,vessel_name,machinery_for,machinery_make,machinery_type,machinery_serial_no,job_type:job_types(name))')
       .eq('id', id)
       .single(),
     supabase
@@ -440,6 +440,14 @@ export const updateQuotationCommercialTerms = async (quotationId: string, payloa
       parts_origin: parsed.partsOrigin || null,
       parts_quality: parsed.partsQuality || null,
       company_letterhead_enabled: parsed.companyLetterheadEnabled,
+      letterhead_enabled: parsed.companyLetterheadEnabled,
+      stamp_enabled: parsed.stampEnabled,
+      signature_enabled: parsed.signatureEnabled,
+      customer_reference: parsed.customerReference || null,
+      customer_trn: parsed.customerTrn || null,
+      company_trn: parsed.companyTrn || null,
+      pic_details: parsed.picDetails || null,
+      additional_notes: parsed.additionalNotes || null,
       validity: parsed.validity || null
     })
     .eq('id', quotationId);

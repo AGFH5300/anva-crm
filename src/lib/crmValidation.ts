@@ -48,7 +48,14 @@ export const quotationCommercialTermsSchema = z.object({
   paymentTerms: z.string().trim().max(300).optional(),
   partsOrigin: z.string().trim().max(300).optional(),
   partsQuality: z.string().trim().max(300).optional(),
-  companyLetterheadEnabled: z.boolean().default(false),
+  companyLetterheadEnabled: z.boolean().default(true),
+  stampEnabled: z.boolean().default(true),
+  signatureEnabled: z.boolean().default(false),
+  customerReference: z.string().trim().max(300).optional(),
+  customerTrn: z.string().trim().max(300).optional(),
+  companyTrn: z.string().trim().max(300).optional(),
+  picDetails: z.string().trim().max(500).optional(),
+  additionalNotes: z.string().trim().max(5000).optional(),
   validity: z.string().trim().max(300).optional()
 });
 
