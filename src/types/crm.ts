@@ -122,12 +122,28 @@ export type SalesOrder = {
   id: string;
   quotation_id: string | null;
   client_id: string;
+  client_name?: string | null;
   document_number: string;
   status: 'draft' | 'confirmed' | 'in-progress' | 'fulfilled' | 'cancelled';
   currency: CurrencyCode;
   subtotal: number;
   vat_amount: number;
   total: number;
+  created_at: string;
+};
+
+export type Invoice = {
+  id: string;
+  sales_order_id: string | null;
+  client_id: string;
+  client_name?: string | null;
+  document_number: string;
+  status: 'draft' | 'issued' | 'paid' | 'overdue' | 'cancelled';
+  issue_date: string;
+  due_date: string | null;
+  currency: CurrencyCode;
+  total: number;
+  balance_due: number;
   created_at: string;
 };
 

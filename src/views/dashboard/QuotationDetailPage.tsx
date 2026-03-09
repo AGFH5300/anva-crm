@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { addQuotationLine, convertQuotationToSalesOrder, deleteQuotationLine, getQuotationDetail, updateQuotationCommercialTerms, updateQuotationLines } from '@/lib/crmApi';
 import DocumentPreview from '@/components/documents/DocumentPreview';
 import { mapQuotationLinesToTemplate } from '@/lib/documentTemplate';
@@ -73,6 +73,7 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
   });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const searchParams = useSearchParams();
+  const router = useRouter();
 
   const load = () => getQuotationDetail(id).then(({ quotation, lines }) => {
     setQuotation(quotation);
@@ -265,6 +266,7 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
     try {
       const createdId = await convertQuotationToSalesOrder(id);
       setSalesOrderId(createdId);
+      router.push(`/dashboard/sales-orders/${createdId}?created=1`);
     } catch (err) {
       setError((err as Error).message);
     }

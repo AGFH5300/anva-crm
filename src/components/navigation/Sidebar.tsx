@@ -9,8 +9,8 @@ const navItems = [
   { to: '/dashboard/enquiries', label: 'Enquiries' },
   { to: '/dashboard/quotations', label: 'Quotations' },
   { to: '/clients', label: 'Clients & Vendors' },
-  { to: '/orders', label: 'Orders' },
-  { to: '/finance', label: 'Finance' },
+  { to: '/dashboard/sales-orders', label: 'Sale Orders' },
+  { to: '/dashboard/invoices', label: 'Invoices' },
   { to: '/logistics', label: 'Logistics' },
   { to: '/reporting', label: 'Reporting' },
   { to: '/settings', label: 'Settings' }
