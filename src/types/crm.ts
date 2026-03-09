@@ -82,8 +82,14 @@ export type QuotationLine = {
   quotation_id: string;
   description: string;
   quantity: number;
+  supplier_cost: number;
+  supplier_currency: CurrencyCode;
+  exchange_rate: number;
+  landed_aed_cost: number;
+  margin_pct: number;
   unit_price: number;
   currency: CurrencyCode;
+  discount_pct: number;
   vat_rate: number;
   is_zero_rated: boolean;
   is_exempt: boolean;
