@@ -1,9 +1,10 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
-import Link from 'next/link';
-import { addEnquiryLine, convertEnquiryToQuotationDraft, deleteEnquiryLine, getEnquiryDetail, listActiveJobTypes, listActiveSalesUsers, updateEnquiry } from '@/lib/crmApi';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { addEnquiryLine, convertEnquiryToQuotationDraft, deleteEnquiryLine, getEnquiryDetail, getQuotationDetail, listActiveJobTypes, listActiveSalesUsers, updateEnquiry } from '@/lib/crmApi';
 import type { Enquiry, EnquiryLine, JobType, SalesUser } from '@/types/crm';
+import { formatIsoDate } from '@/utils/date';
 
 type EnquiryDetailPageProps = {
   id: string;
@@ -13,7 +14,9 @@ const EnquiryDetailPage = ({ id }: EnquiryDetailPageProps) => {
   const [enquiry, setEnquiry] = useState<Enquiry | null>(null);
   const [lines, setLines] = useState<EnquiryLine[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [convertedQuotationId, setConvertedQuotationId] = useState<string | null>(null);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [conversionMessage, setConversionMessage] = useState<string | null>(null);
   const [jobTypeOptions, setJobTypeOptions] = useState<JobType[]>([]);
   const [salesPicOptions, setSalesPicOptions] = useState<SalesUser[]>([]);
 
@@ -65,8 +68,13 @@ const EnquiryDetailPage = ({ id }: EnquiryDetailPageProps) => {
     const form = new FormData(event.currentTarget);
 
     try {
+      const jobTypeId = String(form.get('jobTypeId') ?? '').trim();
+      if (!jobTypeId) {
+        throw new Error('Job Type is required.');
+      }
+
       await updateEnquiry(id, {
-        jobTypeId: String(form.get('jobTypeId') ?? '').trim() || undefined,
+        jobTypeId,
         salesPicUserId: String(form.get('salesPicUserId') ?? '').trim() || undefined,
         picName: String(form.get('picName') ?? '').trim() || undefined,
         picPhone: String(form.get('picPhone') ?? '').trim() || undefined,
@@ -84,8 +92,27 @@ const EnquiryDetailPage = ({ id }: EnquiryDetailPageProps) => {
 
   const onConvert = async () => {
     try {
+      setError(null);
       const quotationId = await convertEnquiryToQuotationDraft(id);
-      setConvertedQuotationId(quotationId);
+      let quotationReference = quotationId;
+
+      if (quotationId) {
+        try {
+          const { quotation } = await getQuotationDetail(quotationId);
+          quotationReference = quotation.document_number || quotationId;
+        } catch {
+          // fallback to returned quotation id when detail lookup is not available
+        }
+      }
+
+      setConversionMessage(`Quotation draft created successfully: ${quotationReference}`);
+      setTimeout(() => {
+        if (quotationId) {
+          router.push(`/dashboard/quotations/${quotationId}`);
+        } else {
+          router.push('/dashboard/quotations');
+        }
+      }, 800);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -96,13 +123,16 @@ const EnquiryDetailPage = ({ id }: EnquiryDetailPageProps) => {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-slate-900">{enquiry.vessel_name || enquiry.client_name || `Enquiry ${enquiry.id.slice(0, 8)}`}</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">Enquiry {enquiry.job_number}</h1>
         <button type="button" onClick={onConvert} className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-white">Convert to quotation draft</button>
       </div>
-      {convertedQuotationId ? <Link className="text-sm text-primary underline" href={`/dashboard/quotations/${convertedQuotationId}`}>Open created quotation</Link> : null}
+      {searchParams.get('created') === '1' ? <p className="text-sm font-medium text-emerald-700">Enquiry created successfully: {enquiry.job_number}</p> : null}
+      {conversionMessage ? <p className="text-sm text-emerald-700">{conversionMessage}</p> : null}
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+        <p><span className="font-medium">Enquiry Ref:</span> {enquiry.job_number}</p>
+        <p><span className="font-medium">Enquiry Date:</span> {formatIsoDate(enquiry.enquiry_date)}</p>
         <p><span className="font-medium">Client:</span> {enquiry.client_name || enquiry.client_id}</p>
         <p><span className="font-medium">PIC:</span> {enquiry.pic_name || '-'}{enquiry.pic_phone ? ` • ${enquiry.pic_phone}` : ''}{enquiry.pic_email ? ` • ${enquiry.pic_email}` : ''}</p>
         <p><span className="font-medium">Job Type:</span> {enquiry.job_type_name || '-'}</p>
@@ -117,14 +147,15 @@ const EnquiryDetailPage = ({ id }: EnquiryDetailPageProps) => {
         <p><span className="font-medium">S. No.:</span> {enquiry.machinery_serial_no || '-'}</p>
       </div>
       <form onSubmit={onSaveMetadata} className="grid gap-2 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-2">
-        <select name="jobTypeId" defaultValue={enquiry.job_type_id || ''} className="rounded border p-2">
-          <option value="">Job Type (optional)</option>
+        <select name="jobTypeId" defaultValue={enquiry.job_type_id || ''} className="rounded border p-2" required>
+          <option value="">Select Job Type</option>
           {jobTypeOptions.map((jobType) => (
             <option key={jobType.id} value={jobType.id}>
               {jobType.name}
             </option>
           ))}
         </select>
+        <p className="text-xs text-slate-500">Job Type is required.</p>
         <select name="salesPicUserId" defaultValue={enquiry.sales_pic_user_id || ''} className="rounded border p-2">
           <option value="">Sales PIC (optional)</option>
           {salesPicOptions.map((user) => (

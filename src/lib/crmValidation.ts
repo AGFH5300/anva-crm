@@ -4,7 +4,7 @@ import { SUPPORTED_CURRENCIES } from '@/types/crm';
 export const enquirySchema = z.object({
   clientId: z.string().uuid(),
   contactId: z.string().uuid().optional(),
-  jobTypeId: z.string().uuid().optional(),
+  jobTypeId: z.string().uuid({ message: 'Job Type is required.' }),
   salesPicUserId: z.string().uuid().optional(),
   picName: z.string().trim().max(200).optional(),
   picPhone: z.string().trim().max(100).optional(),
