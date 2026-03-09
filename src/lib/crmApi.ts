@@ -315,11 +315,25 @@ export const convertEnquiryToQuotationDraft = async (enquiryId: string) => {
 };
 
 export const listQuotations = async () => {
-  const { data, error } = await supabase
+  const primarySelect = 'id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, terms_and_conditions, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, customer_reference, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, validity, created_at, client:clients(name)';
+  const fallbackSelect = 'id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, customer_reference, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, validity, created_at, client:clients(name)';
+
+  let data: unknown[] | null = null;
+  let error: PostgrestError | null = null;
+
+  ({ data, error } = await supabase
     .schema('crm')
     .from('quotations')
-    .select('id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, terms_and_conditions, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, customer_reference, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, validity, created_at, client:clients(name)')
-    .order('created_at', { ascending: false });
+    .select(primarySelect)
+    .order('created_at', { ascending: false }));
+
+  if (error?.code === '42703' && error.message.includes('terms_and_conditions')) {
+    ({ data, error } = await supabase
+      .schema('crm')
+      .from('quotations')
+      .select(fallbackSelect)
+      .order('created_at', { ascending: false }));
+  }
 
   throwIfError(error);
   return ((data ?? []) as Array<Quotation & { client?: { name: string | null } | Array<{ name: string | null }> | null }>).map(({ client, ...item }) => ({
@@ -329,20 +343,42 @@ export const listQuotations = async () => {
 };
 
 export const getQuotationDetail = async (id: string) => {
-  const [{ data: quotation, error: quotationError }, { data: lines, error: linesError }] = await Promise.all([
+  const primarySelect = 'id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, terms_and_conditions, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, customer_reference, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, validity, created_at, client:clients(name), enquiry:enquiries(id,job_number,vessel_name,machinery_for,machinery_make,machinery_type,machinery_serial_no,job_type:job_types(name))';
+  const fallbackSelect = 'id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, customer_reference, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, validity, created_at, client:clients(name), enquiry:enquiries(id,job_number,vessel_name,machinery_for,machinery_make,machinery_type,machinery_serial_no,job_type:job_types(name))';
+
+  const linesQuery = supabase
+    .schema('crm')
+    .from('quotation_items')
+    .select('id, quotation_id, description, quantity, supplier_cost, supplier_currency, exchange_rate, landed_aed_cost, margin_pct, unit_price, currency, discount_pct, vat_rate, is_zero_rated, is_exempt, discount, line_total, sort_order')
+    .eq('quotation_id', id)
+    .order('sort_order');
+
+  let quotation: unknown = null;
+  let quotationError: PostgrestError | null = null;
+  let lines: unknown[] | null = null;
+  let linesError: PostgrestError | null = null;
+
+  [{ data: quotation, error: quotationError }, { data: lines, error: linesError }] = await Promise.all([
     supabase
       .schema('crm')
       .from('quotations')
-      .select('id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, terms_and_conditions, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, customer_reference, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, validity, created_at, client:clients(name), enquiry:enquiries(id,job_number,vessel_name,machinery_for,machinery_make,machinery_type,machinery_serial_no,job_type:job_types(name))')
+      .select(primarySelect)
       .eq('id', id)
       .single(),
-    supabase
-      .schema('crm')
-      .from('quotation_items')
-      .select('id, quotation_id, description, quantity, supplier_cost, supplier_currency, exchange_rate, landed_aed_cost, margin_pct, unit_price, currency, discount_pct, vat_rate, is_zero_rated, is_exempt, discount, line_total, sort_order')
-      .eq('quotation_id', id)
-      .order('sort_order')
+    linesQuery
   ]);
+
+  if (quotationError?.code === '42703' && quotationError.message.includes('terms_and_conditions')) {
+    [{ data: quotation, error: quotationError }, { data: lines, error: linesError }] = await Promise.all([
+      supabase
+        .schema('crm')
+        .from('quotations')
+        .select(fallbackSelect)
+        .eq('id', id)
+        .single(),
+      linesQuery
+    ]);
+  }
 
   throwIfError(quotationError);
   throwIfError(linesError);
