@@ -12,6 +12,7 @@ type SupplierRfqModalProps = {
 };
 
 const nextDocNo = () => `ANVA-RFQ-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 100000)).padStart(5, '0')}`;
+const importAtRuntime = <T,>(moduleName: string) => (new Function('name', 'return import(name)')(moduleName) as Promise<T>);
 
 const SupplierRfqModal = ({ enquiry, lines, onClose }: SupplierRfqModalProps) => {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -51,7 +52,15 @@ const SupplierRfqModal = ({ enquiry, lines, onClose }: SupplierRfqModalProps) =>
       setBusy(true);
       setError(null);
       const documentNumber = nextDocNo();
-      const [{ jsPDF }, autoTableModule] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
+      const [{ jsPDF }, autoTableModule] = await Promise.all([
+        importAtRuntime<{ jsPDF: new (options?: { unit?: string; format?: string }) => {
+          setFontSize: (size: number) => void;
+          text: (text: string, x: number, y: number) => void;
+          output: (type: 'blob') => Blob;
+          save: (fileName: string) => void;
+        } }>('jspdf'),
+        importAtRuntime<{ default?: unknown }>('jspdf-autotable')
+      ]);
       const autoTable = (autoTableModule.default || autoTableModule) as (doc: unknown, options: Record<string, unknown>) => void;
       const doc = new jsPDF({ unit: 'pt', format: 'a4' });
 
