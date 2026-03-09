@@ -150,7 +150,8 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
     if (!file) return;
 
     try {
-      const XLSX = await import('xlsx');
+      const loadSpreadsheetModule = new Function('moduleName', 'return import(moduleName);') as (moduleName: string) => Promise<typeof import('xlsx')>;
+      const XLSX = await loadSpreadsheetModule('xlsx');
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data, { type: 'array' });
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -182,7 +183,12 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
       setSaveMessage('Supplier pricing imported from file (sheet row order mapped to line order).');
       input.value = '';
     } catch (err) {
-      setError(`Unable to import pricing file: ${(err as Error).message}`);
+      const message = (err as Error).message;
+      if (message.includes("Cannot find module") || message.includes("Can't resolve")) {
+        setError('Unable to load Excel parser (xlsx). Please run npm install and redeploy.');
+      } else {
+        setError(`Unable to import pricing file: ${message}`);
+      }
     }
   };
 
@@ -271,7 +277,6 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
             ) : null}
             <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onInput={onImportPricing} />
           </div>
-          <input type="file" accept=".csv,.xlsx,.xls" className="rounded border p-2" onInput={onImportPricing} />
         </div>
 
         {lines.map((line) => {
