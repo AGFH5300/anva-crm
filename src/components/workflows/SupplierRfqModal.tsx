@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createSupplierRfqDocumentLog, listSuppliers, uploadSupplierRfqPdf, upsertEnquirySupplierLink } from '@/lib/crmApi';
 import type { Enquiry, EnquiryLine, Supplier } from '@/types/crm';
 import SupplierQuickAdd from '@/components/workflows/SupplierQuickAdd';
+import { DEFAULT_BRANDING } from '@/lib/documentTemplate';
 
 type SupplierRfqModalProps = {
   enquiry: Enquiry;
@@ -56,10 +57,10 @@ const SupplierRfqModal = ({ enquiry, lines, onClose }: SupplierRfqModalProps) =>
       const doc = new jsPDF({ unit: 'pt', format: 'a4' });
 
       doc.setFontSize(14);
-      doc.text('ANVA Solutions LLC', 40, 46);
+      doc.text(DEFAULT_BRANDING.companyName, 40, 46);
       doc.setFontSize(10);
-      doc.text('Office 2102, Al Shatha Tower, Dubai, UAE', 40, 62);
-      doc.text('Email: sales@anva-solutions.ae | +971-4-555-1234', 40, 76);
+      doc.text(DEFAULT_BRANDING.companyAddress, 40, 62);
+      doc.text(`Email: ${DEFAULT_BRANDING.companyEmail} | ${DEFAULT_BRANDING.companyPhone}`, 40, 76);
 
       doc.setFontSize(16);
       doc.text('SUPPLIER REQUEST FOR QUOTATION (RFQ)', 40, 110);
@@ -95,6 +96,8 @@ const SupplierRfqModal = ({ enquiry, lines, onClose }: SupplierRfqModalProps) =>
       doc.setFontSize(10);
       doc.text('Please provide your best unit price and earliest delivery for the above items.', 40, finalY + 28);
       doc.text('Regards, Procurement Team', 40, finalY + 44);
+      doc.setFontSize(9);
+      doc.text(DEFAULT_BRANDING.footerText, 40, Math.min(finalY + 68, 780));
 
       const blob = doc.output('blob');
       const filePath = await uploadSupplierRfqPdf({ enquiryId: enquiry.id, supplierId: selectedSupplier.id, documentNumber, blob });

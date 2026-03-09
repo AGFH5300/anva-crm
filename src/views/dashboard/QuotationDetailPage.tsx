@@ -4,6 +4,8 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { addQuotationLine, convertQuotationToSalesOrder, deleteQuotationLine, getQuotationDetail, updateQuotationCommercialTerms, updateQuotationLines } from '@/lib/crmApi';
+import DocumentPreview from '@/components/documents/DocumentPreview';
+import { mapQuotationLinesToTemplate } from '@/lib/documentTemplate';
 import type { CurrencyCode, Quotation, QuotationLine } from '@/types/crm';
 
 type QuotationDetailPageProps = {
@@ -31,7 +33,14 @@ type CommercialTermsForm = {
   paymentTerms: string;
   partsOrigin: string;
   partsQuality: string;
+  customerReference: string;
+  customerTrn: string;
+  companyTrn: string;
+  picDetails: string;
+  additionalNotes: string;
   companyLetterheadEnabled: boolean;
+  stampEnabled: boolean;
+  signatureEnabled: boolean;
   validity: string;
 };
 
@@ -52,7 +61,14 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
     paymentTerms: '',
     partsOrigin: '',
     partsQuality: '',
+    customerReference: '',
+    customerTrn: '',
+    companyTrn: '',
+    picDetails: '',
+    additionalNotes: '',
     companyLetterheadEnabled: false,
+    stampEnabled: true,
+    signatureEnabled: true,
     validity: ''
   });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -82,7 +98,14 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
       paymentTerms: quotation.payment_terms ?? '',
       partsOrigin: quotation.parts_origin ?? '',
       partsQuality: quotation.parts_quality ?? '',
+      customerReference: quotation.customer_reference ?? '',
+      customerTrn: quotation.customer_trn ?? '',
+      companyTrn: quotation.company_trn ?? '',
+      picDetails: quotation.pic_details ?? '',
+      additionalNotes: quotation.additional_notes ?? '',
       companyLetterheadEnabled: quotation.company_letterhead_enabled ?? false,
+      stampEnabled: quotation.stamp_enabled ?? true,
+      signatureEnabled: quotation.signature_enabled ?? true,
       validity: quotation.validity ?? ''
     });
   });
@@ -249,37 +272,40 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
 
   const onClientPdf = () => {
     if (!quotation) return;
-    const linesHtml = editableLines.map((line) => {
-      const base = line.quantity * line.unit_price;
-      const discount = line.discount > 0 ? line.discount : base * (line.discount_pct / 100);
-      const taxable = Math.max(0, base - discount);
-      const vat = taxable * (line.vat_rate / 100);
-      const total = taxable + vat;
-      return `<tr><td>${line.description}</td><td>${line.quantity}</td><td>${line.unit_price.toFixed(2)}</td><td>${discount.toFixed(2)}</td><td>${line.vat_rate.toFixed(2)}%</td><td>${total.toFixed(2)}</td></tr>`;
-    }).join('');
-    const printable = window.open('', '_blank', 'width=900,height=700');
+    const printable = window.open('', '_blank', 'width=1000,height=800');
     if (!printable) return;
-    const mustShowCommercialFields = [
-      ['Delivery Terms', commercialTerms.deliveryTerms],
-      ['Payment Terms', commercialTerms.paymentTerms],
-      ['Validity', commercialTerms.validity],
-      ['Delivery Time', commercialTerms.deliveryTime],
-      ['Parts Origin', commercialTerms.partsOrigin],
-      ['Parts Quality', commercialTerms.partsQuality]
-    ].filter(([label, value]) => Boolean(value) || ['Delivery Terms', 'Payment Terms', 'Validity'].includes(label));
-    const commercialRows = mustShowCommercialFields
-      .map(([label, value]) => `<tr><td style="padding:6px;border:1px solid #cbd5e1;font-weight:600;">${label}</td><td style="padding:6px;border:1px solid #cbd5e1;">${value || '-'}</td></tr>`)
-      .join('');
-    const letterheadStyle = commercialTerms.companyLetterheadEnabled
-      ? '<div style="border-bottom:2px solid #0f172a;padding-bottom:10px;margin-bottom:16px;"><h2 style="margin:0;">ANVA Marine & Industrial Supplies</h2><p style="margin:2px 0 0;">Office 1204, Dubai, UAE · +971 00 000 0000 · sales@anva.example</p></div>'
-      : '';
-    const termsBlock = commercialTerms.termsAndConditions
-      ? `<h3 style="margin-top:18px;">Terms & Conditions</h3><p style="white-space:pre-wrap;line-height:1.4;">${commercialTerms.termsAndConditions}</p>`
-      : '';
 
-    printable.document.write(`<html><body style="font-family:Arial,sans-serif;color:#0f172a;">${letterheadStyle}<h1>Quotation ${quotation.document_number}</h1><table border="1" cellspacing="0" cellpadding="6"><thead><tr><th>Description</th><th>Qty</th><th>Unit Price</th><th>Discount</th><th>VAT</th><th>Line Total</th></tr></thead><tbody>${linesHtml}</tbody></table><p>Subtotal: ${liveTotals.subtotal.toFixed(2)}</p><p>VAT: ${liveTotals.vat.toFixed(2)}</p><p><strong>Grand Total: ${liveTotals.total.toFixed(2)}</strong></p><h3>Commercial Terms</h3><table style="border-collapse:collapse;width:100%;">${commercialRows}</table>${termsBlock}</body></html>`);
+    const html = (document.querySelector('[title="Document preview"]') as HTMLIFrameElement | null)?.srcdoc;
+    if (!html) return;
+
+    printable.document.write(html);
     printable.document.close();
     printable.print();
+  };
+
+  const previewDocument = {
+    documentType: 'quotation' as const,
+    title: 'QUOTATION',
+    documentNumber: quotation?.document_number ?? '',
+    date: new Date().toISOString().slice(0, 10),
+    recipientName: quotation?.client_name ?? 'Customer',
+    customerReference: commercialTerms.customerReference,
+    validity: commercialTerms.validity,
+    customerTrn: commercialTerms.customerTrn,
+    companyTrn: commercialTerms.companyTrn,
+    picDetails: commercialTerms.picDetails,
+    currency: quotation?.currency ?? 'AED',
+    lines: mapQuotationLinesToTemplate(editableLines as QuotationLine[]),
+    paymentTerms: commercialTerms.paymentTerms,
+    deliveryTerms: commercialTerms.deliveryTerms,
+    deliveryTime: commercialTerms.deliveryTime,
+    termsAndConditions: commercialTerms.termsAndConditions,
+    partsOrigin: commercialTerms.partsOrigin,
+    partsQuality: commercialTerms.partsQuality,
+    additionalNotes: commercialTerms.additionalNotes,
+    letterheadEnabled: commercialTerms.companyLetterheadEnabled,
+    stampEnabled: commercialTerms.stampEnabled,
+    signatureEnabled: commercialTerms.signatureEnabled,
   };
 
   const liveTotals = useMemo(() => editableLines.reduce((acc, line) => {
@@ -343,9 +369,22 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
           <label className="space-y-1 text-xs font-medium text-slate-600"><span>Validity</span><input className="w-full rounded border p-2 text-sm" value={commercialTerms.validity} onChange={(event) => setCommercialTerms((prev) => ({ ...prev, validity: event.target.value }))} /></label>
           <label className="space-y-1 text-xs font-medium text-slate-600"><span>Parts Origin</span><input className="w-full rounded border p-2 text-sm" value={commercialTerms.partsOrigin} onChange={(event) => setCommercialTerms((prev) => ({ ...prev, partsOrigin: event.target.value }))} /></label>
           <label className="space-y-1 text-xs font-medium text-slate-600"><span>Parts Quality</span><input className="w-full rounded border p-2 text-sm" value={commercialTerms.partsQuality} onChange={(event) => setCommercialTerms((prev) => ({ ...prev, partsQuality: event.target.value }))} /></label>
-          <label className="flex items-center gap-2 text-xs font-medium text-slate-600 md:col-span-2">
+          <label className="space-y-1 text-xs font-medium text-slate-600"><span>Customer Reference</span><input className="w-full rounded border p-2 text-sm" value={commercialTerms.customerReference} onChange={(event) => setCommercialTerms((prev) => ({ ...prev, customerReference: event.target.value }))} /></label>
+          <label className="space-y-1 text-xs font-medium text-slate-600"><span>Customer TRN</span><input className="w-full rounded border p-2 text-sm" value={commercialTerms.customerTrn} onChange={(event) => setCommercialTerms((prev) => ({ ...prev, customerTrn: event.target.value }))} /></label>
+          <label className="space-y-1 text-xs font-medium text-slate-600"><span>Company TRN</span><input className="w-full rounded border p-2 text-sm" value={commercialTerms.companyTrn} onChange={(event) => setCommercialTerms((prev) => ({ ...prev, companyTrn: event.target.value }))} /></label>
+          <label className="space-y-1 text-xs font-medium text-slate-600"><span>PIC Details</span><input className="w-full rounded border p-2 text-sm" value={commercialTerms.picDetails} onChange={(event) => setCommercialTerms((prev) => ({ ...prev, picDetails: event.target.value }))} /></label>
+          <label className="space-y-1 text-xs font-medium text-slate-600 md:col-span-2"><span>Additional Notes</span><textarea className="min-h-20 w-full rounded border p-2 text-sm" value={commercialTerms.additionalNotes} onChange={(event) => setCommercialTerms((prev) => ({ ...prev, additionalNotes: event.target.value }))} /></label>
+          <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
             <input type="checkbox" checked={commercialTerms.companyLetterheadEnabled} onChange={(event) => setCommercialTerms((prev) => ({ ...prev, companyLetterheadEnabled: event.target.checked }))} />
             <span>Use company letterhead for print/PDF output</span>
+          </label>
+          <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
+            <input type="checkbox" checked={commercialTerms.stampEnabled} onChange={(event) => setCommercialTerms((prev) => ({ ...prev, stampEnabled: event.target.checked }))} />
+            <span>Show stamp</span>
+          </label>
+          <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
+            <input type="checkbox" checked={commercialTerms.signatureEnabled} onChange={(event) => setCommercialTerms((prev) => ({ ...prev, signatureEnabled: event.target.checked }))} />
+            <span>Show signature block</span>
           </label>
         </div>
       </div>
@@ -440,7 +479,12 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
         })}
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <h2 className="mb-3 text-base font-semibold">Document Preview</h2>
+        <DocumentPreview document={previewDocument} />
+      </div>
+
+<div className="rounded-xl border border-slate-200 bg-white p-4">
         <h2 className="mb-2 text-base font-semibold">Totals</h2>
         <p>Subtotal: {quotation.currency} {liveTotals.subtotal.toFixed(2)}</p>
         <p>VAT: {quotation.currency} {liveTotals.vat.toFixed(2)}</p>
