@@ -59,6 +59,8 @@ const getDiscountAmount = (baseAmount: number, discountPct: number, discountAmou
   return Math.min(baseAmount, pctAmount);
 };
 
+const generateEnquiryJobNumber = () => `ENQ-${Date.now().toString(36).toUpperCase()}`;
+
 const isUndefinedColumnError = (error: PostgrestError | null) => Boolean(
   error && (error.code === '42703' || /column .* does not exist/i.test(error.message))
 );
@@ -129,13 +131,17 @@ export const listActiveJobTypes = async () => {
 export const listActiveSalesUsers = async () => {
   const { data, error } = await supabase
     .schema('crm')
-    .from('sales_people')
-    .select('id,full_name,email,job_title,is_active')
-    .eq('is_active', true)
-    .order('full_name', { ascending: true });
+    .rpc('list_active_sales_users');
 
   throwIfError(error);
-  return (data ?? []) as SalesUser[];
+
+  return ((data ?? []) as Array<{ id: string; display_name: string | null; email: string | null }>).map((user) => ({
+    id: user.id,
+    full_name: user.display_name ?? user.email ?? 'Unknown',
+    email: user.email,
+    job_title: null,
+    is_active: true,
+  }));
 };
 
 export const listEnquiries = async () => {
@@ -143,7 +149,7 @@ export const listEnquiries = async () => {
     const { data, error } = await supabase
       .schema('crm')
       .from('enquiries')
-      .select('id, job_number, enquiry_date, client_id, contact_id, job_type_id, sales_pic_user_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at, client:clients(name), job_type:job_types(name)')
+      .select('id, job_number, enquiry_date, client_id, contact_id, job_type_id, sales_pic_user_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at, client:clients(name), job_type:job_types(name), quotations(id)')
       .in('status', ACTIVE_ENQUIRY_STATUSES)
       .order('enquiry_date', { ascending: false })
       .order('created_at', { ascending: false });
@@ -152,7 +158,10 @@ export const listEnquiries = async () => {
     return ((data ?? []) as Array<Enquiry & {
       client?: { name: string | null } | Array<{ name: string | null }> | null;
       job_type?: { name: string | null } | Array<{ name: string | null }> | null;
-    }>).map(({ client, job_type, ...item }) => ({
+      quotations?: Array<{ id: string | null }> | null;
+    }>)
+      .filter((item) => !item.quotations?.length)
+      .map(({ client, job_type, quotations, ...item }) => ({
       ...item,
       client_name: getRelationName(client) ?? null,
       job_type_name: getRelationName(job_type) ?? null,
@@ -202,6 +211,8 @@ export const createEnquiry = async (payload: EnquiryInput) => {
     .schema('crm')
     .from('enquiries')
     .insert({
+      job_number: generateEnquiryJobNumber(),
+      enquiry_date: new Date().toISOString().slice(0, 10),
       client_id: parsed.clientId,
       contact_id: parsed.contactId ?? null,
       job_type_id: parsed.jobTypeId,
@@ -359,9 +370,9 @@ export const convertEnquiryToQuotationDraft = async (enquiryId: string) => {
 
 export const listQuotations = async () => {
   const selectCandidates = [
-    'id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, terms_and_conditions, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, customer_reference, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, validity, created_at, client:clients(name)',
-    'id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, customer_reference, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, validity, created_at, client:clients(name)',
-    'id, enquiry_id, client_id, document_number, status, currency, subtotal, vat_amount, total, created_at, client:clients(name)'
+    'id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, terms_and_conditions, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, customer_reference, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, validity, created_at, client:clients(name), sales_orders(id)',
+    'id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, customer_reference, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, validity, created_at, client:clients(name), sales_orders(id)',
+    'id, enquiry_id, client_id, document_number, status, currency, subtotal, vat_amount, total, created_at, client:clients(name), sales_orders(id)'
   ];
 
   let data: Array<Record<string, unknown>> | null = null;
@@ -389,7 +400,9 @@ export const listQuotations = async () => {
 
   throwIfError(error);
 
-  return (data ?? []).map((item) => normalizeQuotation(item, getRelationName((item.client as { name: string | null } | Array<{ name: string | null }> | null | undefined)) ?? null));
+  return (data ?? [])
+    .filter((item) => !(Array.isArray(item.sales_orders) && item.sales_orders.length > 0))
+    .map((item) => normalizeQuotation(item, getRelationName((item.client as { name: string | null } | Array<{ name: string | null }> | null | undefined)) ?? null));
 };
 
 export const getQuotationDetail = async (id: string) => {
@@ -940,34 +953,18 @@ const ACTIVE_SALES_ORDER_STATUSES: SalesOrder['status'][] = ['draft', 'confirmed
 const ACTIVE_INVOICE_STATUSES: Invoice['status'][] = ['draft', 'issued', 'overdue'];
 
 export const getDashboardStageCounts = async (): Promise<DashboardStageCounts> => {
-  const rpc = await supabase.schema('crm').rpc('crm_get_dashboard_stage_counts');
-  if (!rpc.error && rpc.data) {
-    const row = Array.isArray(rpc.data) ? rpc.data[0] : rpc.data;
-    return {
-      enquiries: Number(row.enquiries ?? 0),
-      quotations: Number(row.quotations ?? 0),
-      saleOrders: Number(row.sale_orders ?? row.saleOrders ?? 0),
-      invoices: Number(row.invoices ?? 0)
-    };
-  }
-
   const [enquiries, quotations, saleOrders, invoices] = await Promise.all([
-    supabase.schema('crm').from('enquiries').select('id', { count: 'exact', head: true }).in('status', ACTIVE_ENQUIRY_STATUSES),
-    supabase.schema('crm').from('quotations').select('id', { count: 'exact', head: true }).in('status', ACTIVE_QUOTATION_STATUSES),
-    supabase.schema('crm').from('sales_orders').select('id', { count: 'exact', head: true }).in('status', ACTIVE_SALES_ORDER_STATUSES),
-    supabase.schema('crm').from('invoices').select('id', { count: 'exact', head: true }).in('status', ACTIVE_INVOICE_STATUSES)
+    listEnquiries(),
+    listQuotations(),
+    listSalesOrders(),
+    listInvoices()
   ]);
 
-  throwIfError(enquiries.error);
-  throwIfError(quotations.error);
-  throwIfError(saleOrders.error);
-  throwIfError(invoices.error);
-
   return {
-    enquiries: enquiries.count ?? 0,
-    quotations: quotations.count ?? 0,
-    saleOrders: saleOrders.count ?? 0,
-    invoices: invoices.count ?? 0
+    enquiries: enquiries.length,
+    quotations: quotations.length,
+    saleOrders: saleOrders.length,
+    invoices: invoices.length
   };
 };
 
@@ -975,15 +972,20 @@ export const listSalesOrders = async () => {
   const { data, error } = await supabase
     .schema('crm')
     .from('sales_orders')
-    .select('id, quotation_id, client_id, document_number, status, issue_date, currency, subtotal, vat_amount, total, created_at, client:clients(name)')
+    .select('id, quotation_id, client_id, document_number, status, issue_date, currency, subtotal, vat_amount, total, created_at, client:clients(name), invoices(id)')
     .in('status', ACTIVE_SALES_ORDER_STATUSES)
     .order('created_at', { ascending: false });
 
   throwIfError(error);
-  return ((data ?? []) as Array<SalesOrder & { client?: { name: string | null } | Array<{ name: string | null }> | null }>).map(({ client, ...item }) => ({
-    ...item,
-    client_name: getRelationName(client) ?? null
-  }));
+  return ((data ?? []) as Array<SalesOrder & {
+    client?: { name: string | null } | Array<{ name: string | null }> | null;
+    invoices?: Array<{ id: string | null }> | null;
+  }>)
+    .filter((item) => !item.invoices?.length)
+    .map(({ client, invoices, ...item }) => ({
+      ...item,
+      client_name: getRelationName(client) ?? null
+    }));
 };
 
 export const listInvoices = async () => {

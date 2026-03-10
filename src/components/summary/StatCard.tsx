@@ -17,7 +17,11 @@ const StatCard = ({ title, value, subtitle, href }: StatCardProps) => {
           {title}
         </Link>
         <p className="mt-2 text-3xl font-semibold text-slate-900">
-          <Link href={href} className="underline-offset-4 hover:underline focus:outline-none focus:ring-2 focus:ring-primary/30">
+          <Link
+            href={href}
+            aria-label={`View ${title}`}
+            className="underline-offset-4 hover:underline focus:outline-none focus:ring-2 focus:ring-primary/30"
+          >
             {value}
           </Link>
         </p>
