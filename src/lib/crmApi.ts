@@ -23,7 +23,7 @@ const callFirstAvailableRpc = async <T>(names: string[], args: Record<string, un
   let lastError = '';
 
   for (const name of names) {
-    const response = await supabase.rpc(name, args);
+    const response = await supabase.schema('crm').rpc(name, args);
     if (!response.error) {
       return response.data as T;
     }
