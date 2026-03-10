@@ -24,7 +24,12 @@ const DashboardPage = () => {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold text-slate-900">Business Overview</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-slate-900">Business Overview</h1>
+        <button onClick={() => void load()} className="rounded-md border border-slate-300 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50">
+          Refresh counts
+        </button>
+      </div>
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard title="Enquiries" value={String(counts.enquiries)} subtitle="Active enquiries" href="/dashboard/enquiries" />
