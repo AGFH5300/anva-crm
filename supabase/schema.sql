@@ -254,8 +254,18 @@ create table if not exists crm.quotations (
   issue_date date not null default current_date,
   valid_until date,
   currency text not null default 'AED',
+  terms_and_conditions text,
   payment_terms text,
   delivery_terms text,
+  delivery_time text,
+  parts_origin text,
+  parts_quality text,
+  customer_reference text,
+  customer_trn text,
+  company_trn text,
+  pic_details text,
+  additional_notes text,
+  validity text,
   company_letterhead_enabled boolean not null default false,
   stamp_enabled boolean not null default true,
   signature_enabled boolean not null default true,
@@ -824,10 +834,22 @@ declare
   v_quote crm.quotations%rowtype;
   v_sales_order_id uuid;
 begin
-  select * into v_quote from crm.quotations where id = p_quotation_id;
+  select * into v_quote
+  from crm.quotations
+  where id = p_quotation_id;
 
   if v_quote.id is null then
     raise exception 'Quotation % not found', p_quotation_id;
+  end if;
+
+  select so.id into v_sales_order_id
+  from crm.sales_orders so
+  where so.quotation_id = v_quote.id
+  order by so.created_at desc
+  limit 1;
+
+  if v_sales_order_id is not null then
+    return v_sales_order_id;
   end if;
 
   insert into crm.sales_orders (
@@ -845,6 +867,8 @@ begin
     tax_summary,
     subtotal,
     vat_amount,
+    corporate_tax_amount,
+    discount_total,
     total,
     document_snapshot,
     created_by
@@ -864,6 +888,8 @@ begin
     coalesce(v_quote.tax_summary, '{}'::jsonb),
     v_quote.subtotal,
     v_quote.vat_amount,
+    coalesce(v_quote.corporate_tax_amount, 0),
+    coalesce(v_quote.discount_total, 0),
     v_quote.total,
     coalesce(v_quote.document_snapshot, '{}'::jsonb),
     auth.uid()
@@ -874,8 +900,14 @@ begin
     sales_order_id,
     description,
     quantity,
+    supplier_cost,
+    supplier_currency,
+    exchange_rate,
+    landed_aed_cost,
+    margin_pct,
     unit_price,
     currency,
+    discount_pct,
     vat_rate,
     is_zero_rated,
     is_exempt,
@@ -887,8 +919,14 @@ begin
     v_sales_order_id,
     i.description,
     i.quantity,
+    i.supplier_cost,
+    i.supplier_currency,
+    i.exchange_rate,
+    i.landed_aed_cost,
+    i.margin_pct,
     i.unit_price,
     i.currency,
+    i.discount_pct,
     i.vat_rate,
     i.is_zero_rated,
     i.is_exempt,
@@ -900,7 +938,8 @@ begin
 
   update crm.quotations
   set status = 'accepted'
-  where id = v_quote.id;
+  where id = v_quote.id
+    and status <> 'accepted';
 
   if v_quote.enquiry_id is not null then
     update crm.enquiries

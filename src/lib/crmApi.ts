@@ -23,7 +23,7 @@ const callFirstAvailableRpc = async <T>(names: string[], args: Record<string, un
   let lastError = '';
 
   for (const name of names) {
-    const response = await supabase.rpc(name, args);
+    const response = await supabase.schema('crm').rpc(name, args);
     if (!response.error) {
       return response.data as T;
     }
@@ -62,7 +62,13 @@ const getDiscountAmount = (baseAmount: number, discountPct: number, discountAmou
 const generateEnquiryJobNumber = () => `ENQ-${Date.now().toString(36).toUpperCase()}`;
 
 const isUndefinedColumnError = (error: PostgrestError | null) => Boolean(
-  error && (error.code === '42703' || /column .* does not exist/i.test(error.message))
+  error
+  && (
+    error.code === '42703'
+    || error.code === 'PGRST204'
+    || /column .* does not exist/i.test(error.message)
+    || /could not find the '.*' column .* schema cache/i.test(error.message)
+  )
 );
 
 const normalizeQuotation = (row: Record<string, unknown>, clientName: string | null): Quotation => ({
