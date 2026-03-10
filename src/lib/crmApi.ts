@@ -144,7 +144,7 @@ export const listEnquiries = async () => {
       .schema('crm')
       .from('enquiries')
       .select('id, job_number, enquiry_date, client_id, contact_id, job_type_id, sales_pic_user_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at, client:clients(name), job_type:job_types(name)')
-      .not('status', 'in', '(won,lost)')
+      .in('status', ACTIVE_ENQUIRY_STATUSES)
       .order('enquiry_date', { ascending: false })
       .order('created_at', { ascending: false });
 
@@ -372,6 +372,7 @@ export const listQuotations = async () => {
       .schema('crm')
       .from('quotations')
       .select(selectClause)
+      .in('status', ACTIVE_QUOTATION_STATUSES)
       .order('created_at', { ascending: false });
 
     if (!response.error) {
@@ -933,6 +934,11 @@ export type DashboardStageCounts = {
   invoices: number;
 };
 
+const ACTIVE_ENQUIRY_STATUSES: Enquiry['status'][] = ['new', 'qualified', 'proposal', 'negotiation'];
+const ACTIVE_QUOTATION_STATUSES: Quotation['status'][] = ['draft', 'sent'];
+const ACTIVE_SALES_ORDER_STATUSES: SalesOrder['status'][] = ['draft', 'confirmed', 'in-progress'];
+const ACTIVE_INVOICE_STATUSES: Invoice['status'][] = ['draft', 'issued', 'overdue'];
+
 export const getDashboardStageCounts = async (): Promise<DashboardStageCounts> => {
   const rpc = await supabase.schema('crm').rpc('crm_get_dashboard_stage_counts');
   if (!rpc.error && rpc.data) {
@@ -946,10 +952,10 @@ export const getDashboardStageCounts = async (): Promise<DashboardStageCounts> =
   }
 
   const [enquiries, quotations, saleOrders, invoices] = await Promise.all([
-    supabase.schema('crm').from('enquiries').select('id', { count: 'exact', head: true }).not('status', 'in', '(won,lost)'),
-    supabase.schema('crm').from('quotations').select('id', { count: 'exact', head: true }).in('status', ['draft', 'sent']),
-    supabase.schema('crm').from('sales_orders').select('id', { count: 'exact', head: true }).in('status', ['draft', 'confirmed', 'in-progress']),
-    supabase.schema('crm').from('invoices').select('id', { count: 'exact', head: true }).in('status', ['draft', 'issued', 'overdue'])
+    supabase.schema('crm').from('enquiries').select('id', { count: 'exact', head: true }).in('status', ACTIVE_ENQUIRY_STATUSES),
+    supabase.schema('crm').from('quotations').select('id', { count: 'exact', head: true }).in('status', ACTIVE_QUOTATION_STATUSES),
+    supabase.schema('crm').from('sales_orders').select('id', { count: 'exact', head: true }).in('status', ACTIVE_SALES_ORDER_STATUSES),
+    supabase.schema('crm').from('invoices').select('id', { count: 'exact', head: true }).in('status', ACTIVE_INVOICE_STATUSES)
   ]);
 
   throwIfError(enquiries.error);
@@ -970,7 +976,7 @@ export const listSalesOrders = async () => {
     .schema('crm')
     .from('sales_orders')
     .select('id, quotation_id, client_id, document_number, status, issue_date, currency, subtotal, vat_amount, total, created_at, client:clients(name)')
-    .in('status', ['draft', 'confirmed', 'in-progress'])
+    .in('status', ACTIVE_SALES_ORDER_STATUSES)
     .order('created_at', { ascending: false });
 
   throwIfError(error);
@@ -985,7 +991,7 @@ export const listInvoices = async () => {
     .schema('crm')
     .from('invoices')
     .select('id, sales_order_id, client_id, document_number, status, issue_date, due_date, currency, total, balance_due, created_at, client:clients(name)')
-    .in('status', ['draft', 'issued', 'overdue'])
+    .in('status', ACTIVE_INVOICE_STATUSES)
     .order('created_at', { ascending: false });
 
   throwIfError(error);
