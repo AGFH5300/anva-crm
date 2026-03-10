@@ -53,6 +53,7 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [bulkMarginPct, setBulkMarginPct] = useState(0);
   const [globalDiscountPct, setGlobalDiscountPct] = useState(0);
+  const [clientPoNumber, setClientPoNumber] = useState('');
   const [pricingActionsOpen, setPricingActionsOpen] = useState(false);
   const [commercialTerms, setCommercialTerms] = useState<CommercialTermsForm>({
     termsAndConditions: '',
@@ -99,7 +100,7 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
       paymentTerms: quotation.payment_terms ?? '',
       partsOrigin: quotation.parts_origin ?? '',
       partsQuality: quotation.parts_quality ?? '',
-      customerReference: quotation.customer_reference ?? '',
+      customerReference: quotation.client_reference_number ?? quotation.customer_reference ?? '',
       customerTrn: quotation.customer_trn ?? '',
       companyTrn: quotation.company_trn ?? '',
       picDetails: quotation.pic_details ?? '',
@@ -264,7 +265,7 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
 
   const onConvert = async () => {
     try {
-      const createdId = await convertQuotationToSalesOrder(id);
+      const createdId = await convertQuotationToSalesOrder(id, clientPoNumber || undefined);
       setSalesOrderId(createdId);
       router.push(`/dashboard/sales-orders/${createdId}?created=1`);
     } catch (err) {
@@ -345,7 +346,15 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
       {salesOrderId ? <p className="text-sm text-emerald-700">Sales order created: {salesOrderId}</p> : null}
       {saveMessage ? <p className="text-sm text-emerald-700">{saveMessage}</p> : null}
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      <p className="text-sm text-slate-600">Client reference number: <span className="font-medium">{quotation.client_reference_number || quotation.customer_reference || '-'}</span></p>
       {quotation.enquiry_id ? <Link className="text-sm text-primary underline" href={`/dashboard/enquiries/${quotation.enquiry_id}`}>Back to enquiry</Link> : null}
+
+      <div className="max-w-sm">
+        <label className="space-y-1 text-xs font-medium text-slate-600">
+          <span>Client PO Number (for Sales Order)</span>
+          <input className="w-full rounded border p-2 text-sm" value={clientPoNumber} onChange={(event) => setClientPoNumber(event.target.value)} placeholder="Optional client PO" />
+        </label>
+      </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-4">
         <div className="mb-4 flex items-center justify-between">

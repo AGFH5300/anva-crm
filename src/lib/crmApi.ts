@@ -90,6 +90,7 @@ const normalizeQuotation = (row: Record<string, unknown>, clientName: string | n
   parts_origin: (row.parts_origin as string | null | undefined) ?? null,
   parts_quality: (row.parts_quality as string | null | undefined) ?? null,
   customer_reference: (row.customer_reference as string | null | undefined) ?? null,
+  client_reference_number: ((row.client_reference_number as string | null | undefined) ?? (row.customer_reference as string | null | undefined) ?? null),
   customer_trn: (row.customer_trn as string | null | undefined) ?? null,
   company_trn: (row.company_trn as string | null | undefined) ?? null,
   pic_details: (row.pic_details as string | null | undefined) ?? null,
@@ -115,6 +116,30 @@ export const listClients = async () => {
   }
 
   return (data ?? []) as Array<{ id: string; name: string }>;
+};
+
+export const listClientDirectory = async () => {
+  const { data, error } = await supabase
+    .schema('crm')
+    .from('clients')
+    .select('id,name,contact_person,email,phone,country,type,status')
+    .in('type', ['client', 'both'])
+    .order('name', { ascending: true });
+
+  throwIfError(error);
+  return (data ?? []) as Array<Record<string, string | null>>;
+};
+
+export const listVendorDirectory = async () => {
+  const { data, error } = await supabase
+    .schema('crm')
+    .from('clients')
+    .select('id,name,contact_person,email,phone,country,type,status')
+    .in('type', ['vendor', 'both'])
+    .order('name', { ascending: true });
+
+  throwIfError(error);
+  return (data ?? []) as Array<Record<string, string | null>>;
 };
 
 export const seedDefaultClientsIfMissing = async (clientNames: string[]) => {
@@ -155,7 +180,7 @@ export const listEnquiries = async () => {
     const { data, error } = await supabase
       .schema('crm')
       .from('enquiries')
-      .select('id, job_number, enquiry_date, client_id, contact_id, job_type_id, sales_pic_user_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at, client:clients(name), job_type:job_types(name), quotations(id)')
+      .select('id, job_number, enquiry_date, client_id, contact_id, job_type_id, sales_pic_user_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, client_reference_number, created_at, client:clients(name), job_type:job_types(name), quotations(id)')
       .in('status', ACTIVE_ENQUIRY_STATUSES)
       .order('enquiry_date', { ascending: false })
       .order('created_at', { ascending: false });
@@ -182,7 +207,7 @@ export const getEnquiryDetail = async (id: string) => {
     supabase
       .schema('crm')
       .from('enquiries')
-      .select('id, job_number, enquiry_date, client_id, contact_id, job_type_id, sales_pic_user_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at, client:clients(name), job_type:job_types(name)')
+      .select('id, job_number, enquiry_date, client_id, contact_id, job_type_id, sales_pic_user_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, client_reference_number, created_at, client:clients(name), job_type:job_types(name)')
       .eq('id', id)
       .single(),
     supabase
@@ -233,9 +258,10 @@ export const createEnquiry = async (payload: EnquiryInput) => {
       machinery_for: parsed.machineryFor ?? null,
       machinery_make: parsed.machineryMake ?? null,
       machinery_type: parsed.machineryType ?? null,
-      machinery_serial_no: parsed.machinerySerialNo ?? null
+      machinery_serial_no: parsed.machinerySerialNo ?? null,
+      client_reference_number: parsed.clientReferenceNumber ?? null
     })
-    .select('id, job_number, enquiry_date, client_id, contact_id, job_type_id, sales_pic_user_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at')
+    .select('id, job_number, enquiry_date, client_id, contact_id, job_type_id, sales_pic_user_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, client_reference_number, created_at')
     .single();
 
   throwIfError(error);
@@ -245,7 +271,7 @@ export const createEnquiry = async (payload: EnquiryInput) => {
 
 export const updateEnquiry = async (
   id: string,
-  payload: Pick<EnquiryInput, 'jobTypeId' | 'salesPicUserId' | 'picName' | 'picPhone' | 'picEmail' | 'vesselName' | 'vesselImoNumber' | 'shipyard' | 'hullNumber'>
+  payload: Pick<EnquiryInput, 'jobTypeId' | 'salesPicUserId' | 'picName' | 'picPhone' | 'picEmail' | 'vesselName' | 'vesselImoNumber' | 'shipyard' | 'hullNumber' | 'clientReferenceNumber'>
 ) => {
   const parsed = enquirySchema
     .pick({
@@ -257,7 +283,8 @@ export const updateEnquiry = async (
       vesselName: true,
       vesselImoNumber: true,
       shipyard: true,
-      hullNumber: true
+      hullNumber: true,
+      clientReferenceNumber: true
     })
     .parse(payload);
 
@@ -273,10 +300,11 @@ export const updateEnquiry = async (
       vessel_name: parsed.vesselName,
       vessel_imo_number: parsed.vesselImoNumber ?? null,
       shipyard: parsed.shipyard ?? null,
-      hull_number: parsed.hullNumber ?? null
+      hull_number: parsed.hullNumber ?? null,
+      client_reference_number: parsed.clientReferenceNumber ?? null
     })
     .eq('id', id)
-    .select('id, job_number, enquiry_date, client_id, contact_id, job_type_id, sales_pic_user_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, created_at')
+    .select('id, job_number, enquiry_date, client_id, contact_id, job_type_id, sales_pic_user_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, client_reference_number, created_at')
     .single();
 
   throwIfError(error);
@@ -376,8 +404,8 @@ export const convertEnquiryToQuotationDraft = async (enquiryId: string) => {
 
 export const listQuotations = async () => {
   const selectCandidates = [
-    'id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, terms_and_conditions, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, customer_reference, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, validity, created_at, client:clients(name), sales_orders(id)',
-    'id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, customer_reference, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, validity, created_at, client:clients(name), sales_orders(id)',
+    'id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, terms_and_conditions, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, customer_reference, client_reference_number, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, validity, created_at, client:clients(name), sales_orders(id)',
+    'id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, customer_reference, client_reference_number, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, validity, created_at, client:clients(name), sales_orders(id)',
     'id, enquiry_id, client_id, document_number, status, currency, subtotal, vat_amount, total, created_at, client:clients(name), sales_orders(id)'
   ];
 
@@ -413,8 +441,8 @@ export const listQuotations = async () => {
 
 export const getQuotationDetail = async (id: string) => {
   const selectCandidates = [
-    'id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, terms_and_conditions, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, customer_reference, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, validity, created_at, client:clients(name), enquiry:enquiries(id,job_number,vessel_name,machinery_for,machinery_make,machinery_type,machinery_serial_no,job_type:job_types(name))',
-    'id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, customer_reference, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, validity, created_at, client:clients(name), enquiry:enquiries(id,job_number,vessel_name,machinery_for,machinery_make,machinery_type,machinery_serial_no,job_type:job_types(name))',
+    'id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, terms_and_conditions, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, customer_reference, client_reference_number, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, validity, created_at, client:clients(name), enquiry:enquiries(id,job_number,vessel_name,machinery_for,machinery_make,machinery_type,machinery_serial_no,job_type:job_types(name))',
+    'id, enquiry_id, job_number, client_id, document_number, status, currency, subtotal, vat_amount, total, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, customer_reference, client_reference_number, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, validity, created_at, client:clients(name), enquiry:enquiries(id,job_number,vessel_name,machinery_for,machinery_make,machinery_type,machinery_serial_no,job_type:job_types(name))',
     'id, enquiry_id, client_id, document_number, status, currency, subtotal, vat_amount, total, created_at, client:clients(name), enquiry:enquiries(id,job_number,vessel_name,machinery_for,machinery_make,machinery_type,machinery_serial_no,job_type:job_types(name))'
   ];
 
@@ -667,10 +695,10 @@ export const deleteQuotationLine = async (quotationId: string, lineId: string) =
   await recalculateQuotationTotals(quotationId);
 };
 
-export const convertQuotationToSalesOrder = async (quotationId: string) => {
+export const convertQuotationToSalesOrder = async (quotationId: string, clientPoNumber?: string) => {
   const salesOrderId = await callFirstAvailableRpc<string>(
     ['convert_quotation_to_sales_order', 'crm_convert_quotation_to_sales_order'],
-    { p_quotation_id: quotationId }
+    { p_quotation_id: quotationId, p_client_po_number: clientPoNumber?.trim() || null }
   );
 
   const { error } = await supabase
@@ -687,11 +715,13 @@ export const convertQuotationToSalesOrder = async (quotationId: string) => {
 export const getSalesOrderDetail = async (id: string) => {
   const [{ data: order, error: orderError }, { data: lines, error: linesError }] = await Promise.all([
     supabase
+      .schema('crm')
       .from('sales_orders')
-      .select('id, quotation_id, client_id, document_number, status, currency, subtotal, vat_amount, total, created_at')
+      .select('id, quotation_id, client_id, document_number, status, issue_date, currency, subtotal, vat_amount, total, client_reference_number, client_po_number, created_at')
       .eq('id', id)
       .single(),
     supabase
+      .schema('crm')
       .from('sales_order_items')
       .select('id, sales_order_id, description, quantity, unit_price, currency, vat_rate, is_zero_rated, is_exempt, line_total, sort_order')
       .eq('sales_order_id', id)
@@ -705,6 +735,19 @@ export const getSalesOrderDetail = async (id: string) => {
     order: order as SalesOrder,
     lines: (lines ?? []) as SalesOrderLine[]
   };
+};
+
+export const updateSalesOrderClientPoNumber = async (id: string, clientPoNumber: string) => {
+  const { data, error } = await supabase
+    .schema('crm')
+    .from('sales_orders')
+    .update({ client_po_number: clientPoNumber.trim() || null })
+    .eq('id', id)
+    .select('id, quotation_id, client_id, document_number, status, issue_date, currency, subtotal, vat_amount, total, client_reference_number, client_po_number, created_at')
+    .single();
+
+  throwIfError(error);
+  return data as SalesOrder;
 };
 
 
@@ -978,7 +1021,7 @@ export const listSalesOrders = async () => {
   const { data, error } = await supabase
     .schema('crm')
     .from('sales_orders')
-    .select('id, quotation_id, client_id, document_number, status, issue_date, currency, subtotal, vat_amount, total, created_at, client:clients(name), invoices(id)')
+    .select('id, quotation_id, client_id, document_number, status, issue_date, currency, subtotal, vat_amount, total, client_reference_number, client_po_number, created_at, client:clients(name), invoices(id)')
     .in('status', ACTIVE_SALES_ORDER_STATUSES)
     .order('created_at', { ascending: false });
 
@@ -998,7 +1041,7 @@ export const listInvoices = async () => {
   const { data, error } = await supabase
     .schema('crm')
     .from('invoices')
-    .select('id, sales_order_id, client_id, document_number, status, issue_date, due_date, currency, total, balance_due, created_at, client:clients(name)')
+    .select('id, sales_order_id, client_id, document_number, status, issue_date, due_date, currency, total, balance_due, client_po_number, created_at, client:clients(name)')
     .in('status', ACTIVE_INVOICE_STATUSES)
     .order('created_at', { ascending: false });
 

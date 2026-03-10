@@ -25,6 +25,7 @@ export type Enquiry = {
   machinery_make: string | null;
   machinery_type: string | null;
   machinery_serial_no: string | null;
+  client_reference_number: string | null;
   created_at: string;
 };
 
@@ -84,6 +85,7 @@ export type Quotation = {
   parts_origin: string | null;
   parts_quality: string | null;
   customer_reference: string | null;
+  client_reference_number: string | null;
   customer_trn: string | null;
   company_trn: string | null;
   pic_details: string | null;
@@ -129,6 +131,9 @@ export type SalesOrder = {
   subtotal: number;
   vat_amount: number;
   total: number;
+  client_reference_number: string | null;
+  client_po_number: string | null;
+  issue_date: string;
   created_at: string;
 };
 
@@ -144,6 +149,7 @@ export type Invoice = {
   currency: CurrencyCode;
   total: number;
   balance_due: number;
+  client_po_number: string | null;
   created_at: string;
 };
 
