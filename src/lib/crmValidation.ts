@@ -16,7 +16,8 @@ export const enquirySchema = z.object({
   machineryFor: z.string().trim().max(200).optional(),
   machineryMake: z.string().trim().max(200).optional(),
   machineryType: z.string().trim().max(200).optional(),
-  machinerySerialNo: z.string().trim().max(200).optional()
+  machinerySerialNo: z.string().trim().max(200).optional(),
+  clientReferenceNumber: z.string().trim().max(300).optional()
 });
 
 export const lineSchema = z.object({

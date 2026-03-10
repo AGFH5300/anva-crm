@@ -33,10 +33,8 @@ const EnquiriesListPage = () => {
               <th className="px-3 py-2">Enquiry Date</th>
               <th className="px-3 py-2">Vessel Name</th>
               <th className="px-3 py-2">Job Type</th>
-              <th className="px-3 py-2">FOR</th>
-              <th className="px-3 py-2">MAKE</th>
-              <th className="px-3 py-2">TYPE</th>
               <th className="px-3 py-2">Client</th>
+              <th className="px-3 py-2">Client Reference Number</th>
               <th className="px-3 py-2">Status</th>
             </tr>
           </thead>
@@ -51,16 +49,14 @@ const EnquiriesListPage = () => {
                 <td className="px-3 py-2">{formatIsoDate(item.enquiry_date)}</td>
                 <td className="px-3 py-2">{item.vessel_name || '-'}</td>
                 <td className="px-3 py-2">{item.job_type_name || '-'}</td>
-                <td className="px-3 py-2">{item.machinery_for || '-'}</td>
-                <td className="px-3 py-2">{item.machinery_make || '-'}</td>
-                <td className="px-3 py-2">{item.machinery_type || '-'}</td>
                 <td className="px-3 py-2">{item.client_name || item.client_id}</td>
+                <td className="px-3 py-2">{item.client_reference_number || '-'}</td>
                 <td className="px-3 py-2 uppercase">{item.status}</td>
               </tr>
             ))}
             {!rows.length ? (
               <tr>
-                <td className="px-3 py-4 text-sm text-slate-500" colSpan={9}>
+                <td className="px-3 py-4 text-sm text-slate-500" colSpan={7}>
                   No enquiries yet.
                 </td>
               </tr>

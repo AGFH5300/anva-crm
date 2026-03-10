@@ -101,7 +101,8 @@ const EnquiryDetailPage = ({ id }: EnquiryDetailPageProps) => {
         vesselName: String(form.get('vesselName') ?? '').trim(),
         vesselImoNumber: String(form.get('vesselImoNumber') ?? '').trim() || undefined,
         shipyard: String(form.get('shipyard') ?? '').trim() || undefined,
-        hullNumber: String(form.get('hullNumber') ?? '').trim() || undefined
+        hullNumber: String(form.get('hullNumber') ?? '').trim() || undefined,
+        clientReferenceNumber: String(form.get('clientReferenceNumber') ?? '').trim() || undefined
       });
       await load();
     } catch (err) {
@@ -161,6 +162,7 @@ const EnquiryDetailPage = ({ id }: EnquiryDetailPageProps) => {
         <p><span className="font-medium">Enquiry Ref:</span> {enquiry.job_number}</p>
         <p><span className="font-medium">Enquiry Date:</span> {formatIsoDate(enquiry.enquiry_date)}</p>
         <p><span className="font-medium">Client:</span> {enquiry.client_name || enquiry.client_id}</p>
+        <p><span className="font-medium">Client Reference Number:</span> {enquiry.client_reference_number || '-'}</p>
         <p><span className="font-medium">PIC:</span> {enquiry.pic_name || '-'}{enquiry.pic_phone ? ` • ${enquiry.pic_phone}` : ''}{enquiry.pic_email ? ` • ${enquiry.pic_email}` : ''}</p>
         <p><span className="font-medium">Job Type:</span> {enquiry.job_type_name || '-'}</p>
         <p><span className="font-medium">Sales PIC:</span> {salesPicOptions.find((user) => user.id === enquiry.sales_pic_user_id)?.full_name || '-'}</p>
@@ -194,6 +196,7 @@ const EnquiryDetailPage = ({ id }: EnquiryDetailPageProps) => {
         <input name="picName" defaultValue={enquiry.pic_name || ''} className="rounded border p-2" placeholder="PIC name" />
         <input name="picPhone" defaultValue={enquiry.pic_phone || ''} className="rounded border p-2" placeholder="PIC phone" />
         <input name="picEmail" type="email" defaultValue={enquiry.pic_email || ''} className="rounded border p-2 md:col-span-2" placeholder="PIC email" />
+        <input name="clientReferenceNumber" defaultValue={enquiry.client_reference_number || ''} className="rounded border p-2 md:col-span-2" placeholder="Client reference number" />
         <input name="vesselName" defaultValue={enquiry.vessel_name || ''} className="rounded border p-2" placeholder="Vessel name" required />
         <input name="vesselImoNumber" defaultValue={enquiry.vessel_imo_number || ''} className="rounded border p-2" placeholder="IMO (optional)" />
         <input name="shipyard" defaultValue={enquiry.shipyard || ''} className="rounded border p-2" placeholder="Shipyard (optional)" />
