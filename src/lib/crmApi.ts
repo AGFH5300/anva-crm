@@ -59,6 +59,8 @@ const getDiscountAmount = (baseAmount: number, discountPct: number, discountAmou
   return Math.min(baseAmount, pctAmount);
 };
 
+const generateEnquiryJobNumber = () => `ENQ-${Date.now().toString(36).toUpperCase()}`;
+
 const isUndefinedColumnError = (error: PostgrestError | null) => Boolean(
   error && (error.code === '42703' || /column .* does not exist/i.test(error.message))
 );
@@ -129,13 +131,17 @@ export const listActiveJobTypes = async () => {
 export const listActiveSalesUsers = async () => {
   const { data, error } = await supabase
     .schema('crm')
-    .from('sales_people')
-    .select('id,full_name,email,job_title,is_active')
-    .eq('is_active', true)
-    .order('full_name', { ascending: true });
+    .rpc('list_active_sales_users');
 
   throwIfError(error);
-  return (data ?? []) as SalesUser[];
+
+  return ((data ?? []) as Array<{ id: string; display_name: string | null; email: string | null }>).map((user) => ({
+    id: user.id,
+    full_name: user.display_name ?? user.email ?? 'Unknown',
+    email: user.email,
+    job_title: null,
+    is_active: true,
+  }));
 };
 
 export const listEnquiries = async () => {
@@ -202,6 +208,8 @@ export const createEnquiry = async (payload: EnquiryInput) => {
     .schema('crm')
     .from('enquiries')
     .insert({
+      job_number: generateEnquiryJobNumber(),
+      enquiry_date: new Date().toISOString().slice(0, 10),
       client_id: parsed.clientId,
       contact_id: parsed.contactId ?? null,
       job_type_id: parsed.jobTypeId,
