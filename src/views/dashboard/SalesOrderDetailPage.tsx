@@ -56,6 +56,23 @@ const SalesOrderDetailPage = ({ id }: SalesOrderDetailPageProps) => {
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       <Link className="text-sm text-primary underline" href="/dashboard/sales-orders">Back to sale orders</Link>
       <p className="text-sm text-slate-600">Client reference number: <span className="font-medium">{order.client_reference_number || '-'}</span></p>
+      <div className="grid gap-2 text-sm text-slate-700 md:grid-cols-2">
+        <p><span className="font-medium">Payment Terms:</span> {order.payment_terms || '-'}</p>
+        <p><span className="font-medium">Delivery Terms:</span> {order.delivery_terms || '-'}</p>
+        <p><span className="font-medium">Delivery Time:</span> {order.delivery_time || '-'}</p>
+        <p><span className="font-medium">Validity:</span> {order.validity || '-'}</p>
+        <p><span className="font-medium">Parts Origin:</span> {order.parts_origin || '-'}</p>
+        <p><span className="font-medium">Parts Quality:</span> {order.parts_quality || '-'}</p>
+        <p><span className="font-medium">Company TRN:</span> {order.company_trn || '-'}</p>
+        <p><span className="font-medium">Customer TRN:</span> {order.customer_trn || '-'}</p>
+        <p className="md:col-span-2"><span className="font-medium">PIC Details:</span> {order.pic_details || '-'}</p>
+        <p className="md:col-span-2"><span className="font-medium">Terms & Conditions:</span> {order.terms_and_conditions || '-'}</p>
+        <p className="md:col-span-2"><span className="font-medium">Additional Notes:</span> {order.additional_notes || '-'}</p>
+        <p><span className="font-medium">Company Letterhead:</span> {order.company_letterhead_enabled ? 'Yes' : 'No'}</p>
+        <p><span className="font-medium">Stamp:</span> {order.stamp_enabled ? 'Yes' : 'No'}</p>
+        <p><span className="font-medium">Signature:</span> {order.signature_enabled ? 'Yes' : 'No'}</p>
+      </div>
+
       <div className="max-w-sm space-y-2 rounded-xl border border-slate-200 bg-white p-4">
         <label className="block space-y-1 text-xs font-medium text-slate-600">
           <span>Client PO Number</span>

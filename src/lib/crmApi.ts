@@ -59,8 +59,6 @@ const getDiscountAmount = (baseAmount: number, discountPct: number, discountAmou
   return Math.min(baseAmount, pctAmount);
 };
 
-const deriveEnquiryJobNumber = (id: string) => `ENQ-${id.replace(/-/g, '').slice(0, 8).toUpperCase()}`;
-
 const isUndefinedColumnError = (error: PostgrestError | null) => Boolean(
   error
   && (
@@ -266,22 +264,7 @@ export const createEnquiry = async (payload: EnquiryInput) => {
     .single();
 
   throwIfError(error);
-
-  const enquiry = data as Enquiry;
-  if (enquiry.job_number) {
-    return enquiry;
-  }
-
-  const { data: updatedData, error: updateError } = await supabase
-    .schema('crm')
-    .from('enquiries')
-    .update({ job_number: deriveEnquiryJobNumber(enquiry.id) })
-    .eq('id', enquiry.id)
-    .select(baseSelect)
-    .single();
-
-  throwIfError(updateError);
-  return updatedData as Enquiry;
+  return data as Enquiry;
 };
 
 
@@ -712,59 +695,24 @@ export const deleteQuotationLine = async (quotationId: string, lineId: string) =
 };
 
 export const convertQuotationToSalesOrder = async (quotationId: string, clientPoNumber?: string) => {
-  const rpcNames = ['convert_quotation_to_sales_order', 'crm_convert_quotation_to_sales_order'];
-  const rpcArgsVariants: Array<Record<string, unknown>> = [
-    { p_quotation_id: quotationId, p_client_po_number: clientPoNumber?.trim() || null },
-    { p_quotation_id: quotationId }
-  ];
-
-  let salesOrderId: string | null = null;
-  const attempted: string[] = [];
-  let lastError = '';
-
-  for (const args of rpcArgsVariants) {
-    for (const name of rpcNames) {
-      attempted.push(`${name}(${Object.keys(args).join(', ')})`);
-      const response = await supabase.schema('crm').rpc(name, args);
-      if (response.error) {
-        lastError = response.error.message;
-        if (!response.error.message.toLowerCase().includes('function') && response.error.code !== '42883') {
-          throw new Error(response.error.message);
-        }
-        continue;
-      }
-
-      const data = response.data as unknown;
-      if (typeof data === 'string') {
-        salesOrderId = data;
-        break;
-      }
-      if (data && typeof data === 'object' && 'id' in (data as Record<string, unknown>) && typeof (data as Record<string, unknown>).id === 'string') {
-        salesOrderId = (data as { id: string }).id;
-        break;
-      }
-
-      throw new Error('Quotation conversion RPC returned an unsupported payload. Expected sales order id as uuid text or { id }.');
-    }
-
-    if (salesOrderId) break;
-  }
-
-  if (!salesOrderId) {
-    throw new Error(
-      `No supported quotation->sales-order RPC signature found. Attempted: ${attempted.join(', ')}. Last DB error: ${lastError || 'unknown error'}`
-    );
-  }
-
-  const { error } = await supabase
+  const { data, error } = await supabase
     .schema('crm')
-    .from('quotations')
-    .update({ status: 'accepted' })
-    .eq('id', quotationId);
+    .rpc('crm_convert_quotation_to_sales_order', {
+      p_quotation_id: quotationId,
+      p_client_po_number: clientPoNumber?.trim() || null
+    });
 
   throwIfError(error);
 
-  return salesOrderId;
+  if (typeof data === 'string') {
+    return data;
+  }
+
+  if (data && typeof data === 'object' && 'id' in (data as Record<string, unknown>) && typeof (data as Record<string, unknown>).id === 'string') {
+    return (data as { id: string }).id;
+  }
+
+  throw new Error('Quotation conversion RPC returned an unsupported payload. Expected sales order id as uuid text or { id }.');
 };
 
 export const getSalesOrderDetail = async (id: string) => {
@@ -772,7 +720,7 @@ export const getSalesOrderDetail = async (id: string) => {
     supabase
       .schema('crm')
       .from('sales_orders')
-      .select('id, quotation_id, client_id, document_number, status, issue_date, currency, subtotal, vat_amount, total, client_reference_number, client_po_number, created_at')
+      .select('id, quotation_id, client_id, document_number, status, issue_date, currency, subtotal, vat_amount, total, terms_and_conditions, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, validity, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, client_reference_number, client_po_number, created_at')
       .eq('id', id)
       .single(),
     supabase
@@ -798,7 +746,7 @@ export const updateSalesOrderClientPoNumber = async (id: string, clientPoNumber:
     .from('sales_orders')
     .update({ client_po_number: clientPoNumber.trim() || null })
     .eq('id', id)
-    .select('id, quotation_id, client_id, document_number, status, issue_date, currency, subtotal, vat_amount, total, client_reference_number, client_po_number, created_at')
+    .select('id, quotation_id, client_id, document_number, status, issue_date, currency, subtotal, vat_amount, total, terms_and_conditions, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, validity, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, client_reference_number, client_po_number, created_at')
     .single();
 
   throwIfError(error);

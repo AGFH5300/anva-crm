@@ -14,6 +14,16 @@ begin
 end;
 $$ language plpgsql;
 
+create or replace function crm.tg_set_enquiry_job_number()
+returns trigger as $$
+begin
+  if new.job_number is null or btrim(new.job_number) = '' then
+    new.job_number := 'ENQ-' || upper(substr(replace(new.id::text, '-', ''), 1, 8));
+  end if;
+  return new;
+end;
+$$ language plpgsql;
+
 create table if not exists crm.document_sequences (
   code text primary key,
   prefix text not null,
@@ -186,6 +196,11 @@ create table if not exists crm.enquiries (
 create trigger set_timestamp before update on crm.enquiries
 for each row execute procedure crm.tg_set_timestamp();
 
+drop trigger if exists trg_set_enquiry_job_number on crm.enquiries;
+create trigger trg_set_enquiry_job_number before insert on crm.enquiries
+for each row execute procedure crm.tg_set_enquiry_job_number();
+
+
 create index if not exists idx_enquiries_client on crm.enquiries (client_id);
 create index if not exists idx_enquiries_status on crm.enquiries (status);
 create index if not exists idx_enquiries_owner on crm.enquiries (owner_id);
@@ -329,6 +344,20 @@ create table if not exists crm.sales_orders (
   currency text not null default 'AED',
   payment_terms text,
   delivery_terms text,
+  delivery_time text,
+  terms_and_conditions text,
+  parts_origin text,
+  parts_quality text,
+  validity text,
+  customer_trn text,
+  company_trn text,
+  pic_details text,
+  additional_notes text,
+  company_letterhead_enabled boolean not null default false,
+  stamp_enabled boolean not null default true,
+  signature_enabled boolean not null default true,
+  client_reference_number text,
+  client_po_number text,
   issuer jsonb not null,
   recipient jsonb not null,
   meta jsonb not null default '{}'::jsonb,
@@ -824,7 +853,7 @@ begin
 end;
 $$;
 
-create or replace function crm.crm_convert_quotation_to_sales_order(p_quotation_id uuid)
+create or replace function crm.crm_convert_quotation_to_sales_order(p_quotation_id uuid, p_client_po_number text default null)
 returns uuid
 language plpgsql
 security definer
@@ -849,6 +878,10 @@ begin
   limit 1;
 
   if v_sales_order_id is not null then
+    update crm.sales_orders
+    set client_po_number = coalesce(nullif(trim(p_client_po_number), ''), client_po_number)
+    where id = v_sales_order_id;
+
     return v_sales_order_id;
   end if;
 
@@ -861,6 +894,20 @@ begin
     currency,
     payment_terms,
     delivery_terms,
+    delivery_time,
+    terms_and_conditions,
+    parts_origin,
+    parts_quality,
+    validity,
+    customer_trn,
+    company_trn,
+    pic_details,
+    additional_notes,
+    company_letterhead_enabled,
+    stamp_enabled,
+    signature_enabled,
+    client_reference_number,
+    client_po_number,
     issuer,
     recipient,
     meta,
@@ -882,6 +929,20 @@ begin
     v_quote.currency,
     v_quote.payment_terms,
     v_quote.delivery_terms,
+    v_quote.delivery_time,
+    v_quote.terms_and_conditions,
+    v_quote.parts_origin,
+    v_quote.parts_quality,
+    v_quote.validity,
+    v_quote.customer_trn,
+    v_quote.company_trn,
+    v_quote.pic_details,
+    v_quote.additional_notes,
+    coalesce(v_quote.company_letterhead_enabled, false),
+    coalesce(v_quote.stamp_enabled, true),
+    coalesce(v_quote.signature_enabled, true),
+    coalesce(v_quote.client_reference_number, v_quote.customer_reference),
+    nullif(trim(p_client_po_number), ''),
     v_quote.issuer,
     v_quote.recipient,
     coalesce(v_quote.meta, '{}'::jsonb),
@@ -949,15 +1010,6 @@ begin
 
   return v_sales_order_id;
 end;
-$$;
-
-create or replace function crm.convert_quotation_to_sales_order(p_quotation_id uuid)
-returns uuid
-language sql
-security definer
-set search_path = crm, public
-as $$
-  select crm.crm_convert_quotation_to_sales_order(p_quotation_id);
 $$;
 
 create or replace function crm.crm_convert_sales_order_to_invoice(p_sales_order_id uuid)
@@ -1068,8 +1120,7 @@ $$;
 grant execute on function crm.list_active_sales_users() to authenticated;
 grant execute on function crm.next_document_number(text, text) to authenticated;
 grant execute on function crm.crm_convert_enquiry_to_quotation_draft(uuid) to authenticated;
-grant execute on function crm.crm_convert_quotation_to_sales_order(uuid) to authenticated;
-grant execute on function crm.convert_quotation_to_sales_order(uuid) to authenticated;
+grant execute on function crm.crm_convert_quotation_to_sales_order(uuid, text) to authenticated;
 grant execute on function crm.crm_convert_sales_order_to_invoice(uuid) to authenticated;
 grant execute on function crm.convert_sales_order_to_invoice(uuid) to authenticated;
 
