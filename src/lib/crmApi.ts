@@ -59,7 +59,7 @@ const getDiscountAmount = (baseAmount: number, discountPct: number, discountAmou
   return Math.min(baseAmount, pctAmount);
 };
 
-const generateEnquiryJobNumber = () => `ENQ-${Date.now().toString(36).toUpperCase()}`;
+const deriveEnquiryJobNumber = (id: string) => `ENQ-${id.replace(/-/g, '').slice(0, 8).toUpperCase()}`;
 
 const isUndefinedColumnError = (error: PostgrestError | null) => Boolean(
   error
@@ -238,11 +238,12 @@ export const getEnquiryDetail = async (id: string) => {
 
 export const createEnquiry = async (payload: EnquiryInput) => {
   const parsed = enquirySchema.parse(payload);
+  const baseSelect = 'id, job_number, enquiry_date, client_id, contact_id, job_type_id, sales_pic_user_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, client_reference_number, created_at';
+
   const { data, error } = await supabase
     .schema('crm')
     .from('enquiries')
     .insert({
-      job_number: generateEnquiryJobNumber(),
       enquiry_date: new Date().toISOString().slice(0, 10),
       client_id: parsed.clientId,
       contact_id: parsed.contactId ?? null,
@@ -261,11 +262,26 @@ export const createEnquiry = async (payload: EnquiryInput) => {
       machinery_serial_no: parsed.machinerySerialNo ?? null,
       client_reference_number: parsed.clientReferenceNumber ?? null
     })
-    .select('id, job_number, enquiry_date, client_id, contact_id, job_type_id, sales_pic_user_id, pic_name, pic_phone, pic_email, vessel_name, vessel_imo_number, shipyard, hull_number, status, machinery_for, machinery_make, machinery_type, machinery_serial_no, client_reference_number, created_at')
+    .select(baseSelect)
     .single();
 
   throwIfError(error);
-  return data as Enquiry;
+
+  const enquiry = data as Enquiry;
+  if (enquiry.job_number) {
+    return enquiry;
+  }
+
+  const { data: updatedData, error: updateError } = await supabase
+    .schema('crm')
+    .from('enquiries')
+    .update({ job_number: deriveEnquiryJobNumber(enquiry.id) })
+    .eq('id', enquiry.id)
+    .select(baseSelect)
+    .single();
+
+  throwIfError(updateError);
+  return updatedData as Enquiry;
 };
 
 

@@ -34,8 +34,8 @@ const QuotationsListPage = () => {
             <tr>
               <th className="px-3 py-2">Quotation No</th>
               <th className="px-3 py-2">Date</th>
+              <th className="px-3 py-2">Enquiry Ref</th>
               <th className="px-3 py-2">Client</th>
-              <th className="px-3 py-2">Client Reference Number</th>
               <th className="px-3 py-2">Amount</th>
               <th className="px-3 py-2">Status</th>
             </tr>
@@ -45,8 +45,8 @@ const QuotationsListPage = () => {
               <tr key={item.id} className="border-t border-slate-100 hover:bg-slate-50">
                 <td className="px-3 py-2 font-semibold text-slate-900"><Link href={`/dashboard/quotations/${item.id}`} className="text-primary hover:underline">{item.document_number}</Link></td>
                 <td className="px-3 py-2">{formatIsoDate(item.created_at)}</td>
+                <td className="px-3 py-2">{item.job_number || '-'}</td>
                 <td className="px-3 py-2">{item.client_name || item.client_id}</td>
-                <td className="px-3 py-2">{item.client_reference_number || '-'}</td>
                 <td className="px-3 py-2">{item.currency} {item.total.toFixed(2)}</td>
                 <td className="px-3 py-2 uppercase">{item.status}</td>
               </tr>
