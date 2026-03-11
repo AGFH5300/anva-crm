@@ -120,7 +120,7 @@ export const listClientDirectory = async () => {
   const { data, error } = await supabase
     .schema('crm')
     .from('clients')
-    .select('id,name,contact_person,email,phone,country,type,status')
+    .select('id,name,email:contact_email,phone:contact_phone,type,status')
     .in('type', ['client', 'both'])
     .order('name', { ascending: true });
 
@@ -132,7 +132,7 @@ export const listVendorDirectory = async () => {
   const { data, error } = await supabase
     .schema('crm')
     .from('clients')
-    .select('id,name,contact_person,email,phone,country,type,status')
+    .select('id,name,email:contact_email,phone:contact_phone,type,status')
     .in('type', ['vendor', 'both'])
     .order('name', { ascending: true });
 
