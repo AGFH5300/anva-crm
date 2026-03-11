@@ -712,10 +712,49 @@ export const deleteQuotationLine = async (quotationId: string, lineId: string) =
 };
 
 export const convertQuotationToSalesOrder = async (quotationId: string, clientPoNumber?: string) => {
-  const salesOrderId = await callFirstAvailableRpc<string>(
-    ['convert_quotation_to_sales_order', 'crm_convert_quotation_to_sales_order'],
-    { p_quotation_id: quotationId, p_client_po_number: clientPoNumber?.trim() || null }
-  );
+  const rpcNames = ['convert_quotation_to_sales_order', 'crm_convert_quotation_to_sales_order'];
+  const rpcArgsVariants: Array<Record<string, unknown>> = [
+    { p_quotation_id: quotationId, p_client_po_number: clientPoNumber?.trim() || null },
+    { p_quotation_id: quotationId }
+  ];
+
+  let salesOrderId: string | null = null;
+  const attempted: string[] = [];
+  let lastError = '';
+
+  for (const args of rpcArgsVariants) {
+    for (const name of rpcNames) {
+      attempted.push(`${name}(${Object.keys(args).join(', ')})`);
+      const response = await supabase.schema('crm').rpc(name, args);
+      if (response.error) {
+        lastError = response.error.message;
+        if (!response.error.message.toLowerCase().includes('function') && response.error.code !== '42883') {
+          throw new Error(response.error.message);
+        }
+        continue;
+      }
+
+      const data = response.data as unknown;
+      if (typeof data === 'string') {
+        salesOrderId = data;
+        break;
+      }
+      if (data && typeof data === 'object' && 'id' in (data as Record<string, unknown>) && typeof (data as Record<string, unknown>).id === 'string') {
+        salesOrderId = (data as { id: string }).id;
+        break;
+      }
+
+      throw new Error('Quotation conversion RPC returned an unsupported payload. Expected sales order id as uuid text or { id }.');
+    }
+
+    if (salesOrderId) break;
+  }
+
+  if (!salesOrderId) {
+    throw new Error(
+      `No supported quotation->sales-order RPC signature found. Attempted: ${attempted.join(', ')}. Last DB error: ${lastError || 'unknown error'}`
+    );
+  }
 
   const { error } = await supabase
     .schema('crm')
