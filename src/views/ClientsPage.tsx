@@ -6,10 +6,8 @@ import { listClientDirectory } from '@/lib/crmApi';
 type DirectoryRow = {
   id: string | null;
   name: string | null;
-  contact_person: string | null;
   email: string | null;
   phone: string | null;
-  country: string | null;
   type: string | null;
   status: string | null;
 };
@@ -33,25 +31,21 @@ const ClientsPage = () => {
           <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-3 py-2">Client Name</th>
-              <th className="px-3 py-2">Contact Person</th>
-              <th className="px-3 py-2">Email</th>
+                            <th className="px-3 py-2">Email</th>
               <th className="px-3 py-2">Phone</th>
-              <th className="px-3 py-2">Country</th>
-              <th className="px-3 py-2">Status / Type</th>
+                            <th className="px-3 py-2">Status / Type</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((client, index) => (
               <tr key={client.id || `${client.name || 'client'}-${index}`} className="border-t border-slate-100 hover:bg-slate-50">
                 <td className="px-3 py-2 font-medium text-slate-900">{client.name || '-'}</td>
-                <td className="px-3 py-2">{client.contact_person || '-'}</td>
-                <td className="px-3 py-2">{client.email || '-'}</td>
+                                <td className="px-3 py-2">{client.email || '-'}</td>
                 <td className="px-3 py-2">{client.phone || '-'}</td>
-                <td className="px-3 py-2">{client.country || '-'}</td>
-                <td className="px-3 py-2">{client.status || client.type || '-'}</td>
+                                <td className="px-3 py-2">{client.status || client.type || '-'}</td>
               </tr>
             ))}
-            {!rows.length ? <tr><td className="px-3 py-4 text-sm text-slate-500" colSpan={6}>No clients found.</td></tr> : null}
+            {!rows.length ? <tr><td className="px-3 py-4 text-sm text-slate-500" colSpan={4}>No clients found.</td></tr> : null}
           </tbody>
         </table>
       </div>
