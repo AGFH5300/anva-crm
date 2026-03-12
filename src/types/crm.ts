@@ -123,6 +123,7 @@ export type QuotationLine = {
 export type SalesOrder = {
   id: string;
   quotation_id: string | null;
+  quotation_document_number?: string | null;
   client_id: string;
   client_name?: string | null;
   document_number: string;

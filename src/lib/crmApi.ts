@@ -1039,19 +1039,21 @@ export const listSalesOrders = async () => {
   const { data, error } = await supabase
     .schema('crm')
     .from('sales_orders')
-    .select('id, quotation_id, client_id, document_number, status, issue_date, currency, subtotal, vat_amount, total, client_reference_number, client_po_number, created_at, client:clients(name), invoices(id)')
+    .select('id, quotation_id, client_id, document_number, status, issue_date, currency, subtotal, vat_amount, total, client_reference_number, client_po_number, created_at, client:clients(name), quotation:quotations(document_number), invoices(id)')
     .in('status', ACTIVE_SALES_ORDER_STATUSES)
     .order('created_at', { ascending: false });
 
   throwIfError(error);
   return ((data ?? []) as Array<SalesOrder & {
     client?: { name: string | null } | Array<{ name: string | null }> | null;
+    quotation?: { document_number: string | null } | Array<{ document_number: string | null }> | null;
     invoices?: Array<{ id: string | null }> | null;
   }>)
     .filter((item) => !item.invoices?.length)
-    .map(({ client, invoices, ...item }) => ({
+    .map(({ client, quotation, invoices, ...item }) => ({
       ...item,
-      client_name: getRelationName(client) ?? null
+      client_name: getRelationName(client) ?? null,
+      quotation_document_number: Array.isArray(quotation) ? (quotation[0]?.document_number ?? null) : (quotation?.document_number ?? null)
     }));
 };
 
