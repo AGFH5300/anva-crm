@@ -2,7 +2,7 @@
 
 import { FormEvent, KeyboardEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { addEnquiryLine, createEnquiry, listActiveJobTypes, listActiveSalesUsers, listClients } from '@/lib/crmApi';
+import { addEnquiryLine, createClient, createEnquiry, listActiveJobTypes, listActiveSalesUsers, listClients } from '@/lib/crmApi';
 import { JobType, SalesUser, SUPPORTED_CURRENCIES } from '@/types/crm';
 
 type EnquiryLineForm = {
@@ -68,6 +68,7 @@ const NewEnquiryPage = () => {
   const [customerLoadError, setCustomerLoadError] = useState<string | null>(null);
   const [jobTypeLoadError, setJobTypeLoadError] = useState<string | null>(null);
   const [salesPeopleLoadError, setSalesPeopleLoadError] = useState<string | null>(null);
+  const [newClientName, setNewClientName] = useState('');
 
   useEffect(() => {
     setIsLoadingCustomers(true);
@@ -198,6 +199,17 @@ const NewEnquiryPage = () => {
     }
   };
 
+  const onAddClient = async () => {
+    if (!newClientName.trim()) return;
+    try {
+      const created = await createClient({ name: newClientName, type: 'client' });
+      setCustomerOptions((prev) => [...prev, { id: created.id, name: created.name }].sort((a, b) => a.name.localeCompare(b.name)));
+      setNewClientName('');
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-semibold text-slate-900">New enquiry</h1>
@@ -210,6 +222,10 @@ const NewEnquiryPage = () => {
             </option>
           ))}
         </select>
+        <div className="flex gap-2">
+          <input value={newClientName} onChange={(event) => setNewClientName(event.target.value)} className="flex-1 rounded border p-2 text-xs" placeholder="Add new client inline" />
+          <button type="button" onClick={onAddClient} className="rounded border border-slate-300 px-2 py-1 text-xs">Add</button>
+        </div>
         {isLoadingCustomers ? <p className="text-xs text-slate-500">Loading...</p> : null}
         {!isLoadingCustomers && !customerLoadError && customerOptions.length === 0 ? <p className="text-xs text-slate-500">No records found</p> : null}
         {customerLoadError ? <p className="text-xs text-red-600">{customerLoadError}</p> : null}

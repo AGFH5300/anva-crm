@@ -18,7 +18,7 @@ create or replace function crm.tg_set_enquiry_job_number()
 returns trigger as $$
 begin
   if new.job_number is null or btrim(new.job_number) = '' then
-    new.job_number := 'ENQ-' || upper(substr(replace(new.id::text, '-', ''), 1, 8));
+    new.job_number := crm.next_document_number('enquiry', 'ENQ');
   end if;
   return new;
 end;
@@ -64,6 +64,37 @@ create table if not exists crm.clients (
 );
 
 create trigger set_timestamp before update on crm.clients
+for each row execute procedure crm.tg_set_timestamp();
+
+create table if not exists crm.suppliers (
+  id uuid primary key default gen_random_uuid(),
+  supplier_code text,
+  company_name text not null,
+  contact_person text,
+  email text,
+  phone text,
+  mobile text,
+  website text,
+  address_line_1 text,
+  address_line_2 text,
+  city text,
+  state text,
+  country text,
+  postal_code text,
+  tax_registration_no text,
+  payment_terms text,
+  currency text not null default 'AED',
+  vendor_type text,
+  notes text,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
+create unique index if not exists idx_suppliers_company_name_ci on crm.suppliers (lower(company_name));
+create index if not exists idx_suppliers_email_ci on crm.suppliers (lower(email));
+
+drop trigger if exists set_timestamp on crm.suppliers;
+create trigger set_timestamp before update on crm.suppliers
 for each row execute procedure crm.tg_set_timestamp();
 
 create index if not exists idx_clients_type on crm.clients (type);
@@ -1137,6 +1168,7 @@ grant execute on function crm.convert_sales_order_to_invoice(uuid) to authentica
 alter table crm.document_sequences enable row level security;
 alter table crm.job_types enable row level security;
 alter table crm.clients enable row level security;
+alter table crm.suppliers enable row level security;
 alter table crm.contacts enable row level security;
 alter table crm.tags enable row level security;
 alter table crm.client_tags enable row level security;
@@ -1182,6 +1214,12 @@ create policy "Allow authenticated read clients" on crm.clients
 for select using (auth.uid() is not null);
 
 create policy "Allow authenticated modify clients" on crm.clients
+for all using (auth.uid() is not null) with check (auth.uid() is not null);
+
+create policy "Allow authenticated read suppliers" on crm.suppliers
+for select using (auth.uid() is not null);
+
+create policy "Allow authenticated modify suppliers" on crm.suppliers
 for all using (auth.uid() is not null) with check (auth.uid() is not null);
 
 create policy "Allow authenticated read contacts" on crm.contacts
