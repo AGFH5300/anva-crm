@@ -19,25 +19,6 @@ const throwIfError = (error: PostgrestError | null) => {
 };
 
 
-const callFirstAvailableRpc = async <T>(names: string[], args: Record<string, unknown>) => {
-  let lastError = '';
-
-  for (const name of names) {
-    const response = await supabase.schema('crm').rpc(name, args);
-    if (!response.error) {
-      return response.data as T;
-    }
-    lastError = response.error.message;
-    if (!response.error.message.toLowerCase().includes('function') && response.error.code !== '42883') {
-      throw new Error(response.error.message);
-    }
-  }
-
-  throw new Error(
-    `No supported conversion RPC found (${names.join(', ')}). Last DB error: ${lastError || 'unknown error'}`
-  );
-};
-
 const getRelationName = (value: { name: string | null } | Array<{ name: string | null }> | null | undefined) => {
   if (!value) return null;
   return Array.isArray(value) ? value[0]?.name ?? null : value.name ?? null;
@@ -120,24 +101,58 @@ export const listClientDirectory = async () => {
   const { data, error } = await supabase
     .schema('crm')
     .from('clients')
-    .select('id,name,email:contact_email,phone:contact_phone,type,status')
+    .select('id,name,email:contact_email,phone:contact_phone,type,status,shipping_country:shipping_address->>country,billing_country:billing_address->>country,contacts(id,first_name,last_name,is_primary)')
     .in('type', ['client', 'both'])
     .order('name', { ascending: true });
 
   throwIfError(error);
-  return (data ?? []) as Array<Record<string, string | null>>;
+  return ((data ?? []) as Array<Record<string, unknown>>).map((row) => {
+    const contacts = ((row.contacts as Array<{ first_name: string | null; last_name: string | null; is_primary: boolean | null }> | null | undefined) ?? []);
+    const primary = contacts.find((contact) => Boolean(contact.is_primary)) ?? contacts[0] ?? null;
+    const firstName = primary?.first_name?.trim() ?? '';
+    const lastName = primary?.last_name?.trim() ?? '';
+    const contactPerson = `${firstName} ${lastName}`.trim() || null;
+
+    return {
+      id: (row.id as string | null) ?? null,
+      name: (row.name as string | null) ?? null,
+      email: (row.email as string | null) ?? null,
+      phone: (row.phone as string | null) ?? null,
+      type: (row.type as string | null) ?? null,
+      status: (row.status as string | null) ?? null,
+      contact_person: contactPerson,
+      country: (row.shipping_country as string | null) ?? (row.billing_country as string | null) ?? null,
+    };
+  });
 };
 
 export const listVendorDirectory = async () => {
   const { data, error } = await supabase
     .schema('crm')
     .from('clients')
-    .select('id,name,email:contact_email,phone:contact_phone,type,status')
+    .select('id,name,email:contact_email,phone:contact_phone,type,status,shipping_country:shipping_address->>country,billing_country:billing_address->>country,contacts(id,first_name,last_name,is_primary)')
     .in('type', ['vendor', 'both'])
     .order('name', { ascending: true });
 
   throwIfError(error);
-  return (data ?? []) as Array<Record<string, string | null>>;
+  return ((data ?? []) as Array<Record<string, unknown>>).map((row) => {
+    const contacts = ((row.contacts as Array<{ first_name: string | null; last_name: string | null; is_primary: boolean | null }> | null | undefined) ?? []);
+    const primary = contacts.find((contact) => Boolean(contact.is_primary)) ?? contacts[0] ?? null;
+    const firstName = primary?.first_name?.trim() ?? '';
+    const lastName = primary?.last_name?.trim() ?? '';
+    const contactPerson = `${firstName} ${lastName}`.trim() || null;
+
+    return {
+      id: (row.id as string | null) ?? null,
+      name: (row.name as string | null) ?? null,
+      email: (row.email as string | null) ?? null,
+      phone: (row.phone as string | null) ?? null,
+      type: (row.type as string | null) ?? null,
+      status: (row.status as string | null) ?? null,
+      contact_person: contactPerson,
+      country: (row.shipping_country as string | null) ?? (row.billing_country as string | null) ?? null,
+    };
+  });
 };
 
 export const seedDefaultClientsIfMissing = async (clientNames: string[]) => {
@@ -1056,20 +1071,25 @@ export const listInvoices = async () => {
 };
 
 export const convertSalesOrderToInvoice = async (salesOrderId: string) => {
-  const invoiceId = await callFirstAvailableRpc<string>(
-    ['convert_sales_order_to_invoice', 'crm_convert_sales_order_to_invoice'],
-    { p_sales_order_id: salesOrderId }
-  );
+  const { data: invoiceId, error } = await supabase
+    .schema('crm')
+    .rpc('crm_convert_sales_order_to_invoice', { p_sales_order_id: salesOrderId });
 
-  const { error } = await supabase
+  throwIfError(error);
+
+  if (!invoiceId) {
+    throw new Error('Sales order conversion succeeded but no invoice id was returned.');
+  }
+
+  const { error: statusError } = await supabase
     .schema('crm')
     .from('sales_orders')
     .update({ status: 'fulfilled' })
     .eq('id', salesOrderId);
 
-  throwIfError(error);
+  throwIfError(statusError);
 
-  return invoiceId;
+  return invoiceId as string;
 };
 
 export const getCompanyDocumentSettings = async () => {
