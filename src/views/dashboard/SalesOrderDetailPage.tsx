@@ -2,7 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { convertSalesOrderToInvoice, getSalesOrderDetail, updateSalesOrderClientPoNumber } from '@/lib/crmApi';
+import {
+  convertSalesOrderToInvoice,
+  createClient,
+  createSupplierPurchaseOrderFromSalesOrder,
+  getSalesOrderDetail,
+  listVendorClients,
+  updateSalesOrderClientPoNumber
+} from '@/lib/crmApi';
 import type { SalesOrder, SalesOrderLine } from '@/types/crm';
 
 type SalesOrderDetailPageProps = { id: string };
@@ -13,6 +20,13 @@ const SalesOrderDetailPage = ({ id }: SalesOrderDetailPageProps) => {
   const [invoiceId, setInvoiceId] = useState<string | null>(null);
   const [clientPoNumber, setClientPoNumber] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [supplierOptions, setSupplierOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [supplierId, setSupplierId] = useState('');
+  const [newSupplierName, setNewSupplierName] = useState('');
+  const [supplierReference, setSupplierReference] = useState('');
+  const [expectedDelivery, setExpectedDelivery] = useState('');
+  const [poNotes, setPoNotes] = useState('');
+  const [createdPoId, setCreatedPoId] = useState<string | null>(null);
 
   useEffect(() => {
     getSalesOrderDetail(id)
@@ -20,6 +34,12 @@ const SalesOrderDetailPage = ({ id }: SalesOrderDetailPageProps) => {
         setOrder(order);
         setLines(lines);
         setClientPoNumber(order.client_po_number || '');
+      })
+      .catch((err: Error) => setError(err.message));
+
+    listVendorClients()
+      .then((suppliers) => {
+        setSupplierOptions(suppliers.map((item) => ({ id: item.id, name: item.name })));
       })
       .catch((err: Error) => setError(err.message));
   }, [id]);
@@ -39,6 +59,39 @@ const SalesOrderDetailPage = ({ id }: SalesOrderDetailPageProps) => {
       const updated = await updateSalesOrderClientPoNumber(id, clientPoNumber);
       setOrder(updated);
       setClientPoNumber(updated.client_po_number || '');
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const onAddSupplier = async () => {
+    if (!newSupplierName.trim()) return;
+    try {
+      const created = await createClient({ name: newSupplierName, type: 'vendor' });
+      setSupplierOptions((prev) => [...prev, { id: created.id, name: created.name }].sort((a, b) => a.name.localeCompare(b.name)));
+      setSupplierId(created.id);
+      setNewSupplierName('');
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const onCreateSupplierPo = async () => {
+    if (!supplierId) {
+      setError('Please choose a supplier before creating Supplier PO.');
+      return;
+    }
+
+    try {
+      setError(null);
+      const poId = await createSupplierPurchaseOrderFromSalesOrder({
+        salesOrderId: id,
+        supplierId,
+        supplierReference,
+        expectedDelivery,
+        notes: poNotes,
+      });
+      setCreatedPoId(poId);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -80,6 +133,27 @@ const SalesOrderDetailPage = ({ id }: SalesOrderDetailPageProps) => {
         </label>
         <button type="button" onClick={onSaveClientPo} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium">Save client PO</button>
       </div>
+
+      <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+        <h2 className="text-sm font-semibold text-slate-900">Raise Supplier Purchase Order</h2>
+        <label className="block space-y-1 text-xs font-medium text-slate-600">
+          <span>Supplier</span>
+          <select className="w-full rounded border p-2 text-sm" value={supplierId} onChange={(event) => setSupplierId(event.target.value)}>
+            <option value="">Select supplier</option>
+            {supplierOptions.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
+          </select>
+        </label>
+        <div className="flex gap-2">
+          <input className="flex-1 rounded border p-2 text-sm" placeholder="Add new supplier" value={newSupplierName} onChange={(event) => setNewSupplierName(event.target.value)} />
+          <button type="button" className="rounded border border-slate-300 px-3 py-2 text-sm" onClick={onAddSupplier}>Add</button>
+        </div>
+        <input className="w-full rounded border p-2 text-sm" placeholder="Supplier reference (optional)" value={supplierReference} onChange={(event) => setSupplierReference(event.target.value)} />
+        <input className="w-full rounded border p-2 text-sm" type="date" value={expectedDelivery} onChange={(event) => setExpectedDelivery(event.target.value)} />
+        <textarea className="w-full rounded border p-2 text-sm" rows={2} placeholder="Notes / commercial terms" value={poNotes} onChange={(event) => setPoNotes(event.target.value)} />
+        <button type="button" onClick={onCreateSupplierPo} className="w-fit rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white">Create supplier PO from this sale order</button>
+        {createdPoId ? <p className="text-sm text-emerald-700">Supplier PO created. <Link href={`/dashboard/supplier-purchase-orders/${createdPoId}`} className="underline">Open PO</Link></p> : null}
+      </div>
+
       <div className="rounded-xl border border-slate-200 bg-white p-4">
         {lines.map((line) => (
           <p key={line.id} className="border-b py-2 text-sm last:border-b-0">{line.description} • Qty: {line.quantity}</p>

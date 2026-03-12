@@ -10,7 +10,22 @@ import {
   type QuotationCommercialTermsInput,
   type QuotationLineInput
 } from '@/lib/crmValidation';
-import type { CompanyDocumentSettings, Enquiry, EnquiryLine, Invoice, JobType, Quotation, QuotationLine, SalesOrder, SalesOrderLine, SalesUser, Supplier, SupplierRfqDocument } from '@/types/crm';
+import type {
+  CompanyDocumentSettings,
+  Enquiry,
+  EnquiryLine,
+  Invoice,
+  JobType,
+  Quotation,
+  QuotationLine,
+  SalesOrder,
+  SalesOrderLine,
+  SalesUser,
+  Supplier,
+  SupplierPurchaseOrder,
+  SupplierPurchaseOrderLine,
+  SupplierRfqDocument
+} from '@/types/crm';
 
 const throwIfError = (error: PostgrestError | null) => {
   if (error) {
@@ -95,6 +110,29 @@ export const listClients = async () => {
   }
 
   return (data ?? []) as Array<{ id: string; name: string }>;
+};
+
+export const createClient = async (payload: {
+  name: string;
+  type?: 'client' | 'vendor' | 'both';
+  email?: string;
+  phone?: string;
+}) => {
+  const { data, error } = await supabase
+    .schema('crm')
+    .from('clients')
+    .insert({
+      name: payload.name.trim(),
+      type: payload.type ?? 'client',
+      status: 'active',
+      contact_email: payload.email?.trim() || null,
+      contact_phone: payload.phone?.trim() || null,
+    })
+    .select('id,name,type,status,account_code')
+    .single();
+
+  throwIfError(error);
+  return data as { id: string; name: string; type: string };
 };
 
 export const listClientDirectory = async () => {
@@ -1039,7 +1077,7 @@ export const listSalesOrders = async () => {
   const { data, error } = await supabase
     .schema('crm')
     .from('sales_orders')
-    .select('id, quotation_id, client_id, document_number, status, issue_date, currency, subtotal, vat_amount, total, client_reference_number, client_po_number, created_at, client:clients(name), quotation:quotations(document_number), invoices(id)')
+    .select('id, quotation_id, client_id, document_number, status, issue_date, currency, subtotal, vat_amount, total, client_reference_number, client_po_number, created_at, client:clients(name), quotation:quotations(document_number)')
     .in('status', ACTIVE_SALES_ORDER_STATUSES)
     .order('created_at', { ascending: false });
 
@@ -1047,14 +1085,166 @@ export const listSalesOrders = async () => {
   return ((data ?? []) as Array<SalesOrder & {
     client?: { name: string | null } | Array<{ name: string | null }> | null;
     quotation?: { document_number: string | null } | Array<{ document_number: string | null }> | null;
-    invoices?: Array<{ id: string | null }> | null;
   }>)
-    .filter((item) => !item.invoices?.length)
-    .map(({ client, quotation, invoices, ...item }) => ({
+    .map(({ client, quotation, ...item }) => ({
       ...item,
       client_name: getRelationName(client) ?? null,
       quotation_document_number: Array.isArray(quotation) ? (quotation[0]?.document_number ?? null) : (quotation?.document_number ?? null)
     }));
+};
+
+export const listVendorClients = async () => {
+  const { data, error } = await supabase
+    .schema('crm')
+    .from('clients')
+    .select('id,name,contact_email,contact_phone,payment_terms')
+    .in('type', ['vendor', 'both'])
+    .eq('status', 'active')
+    .order('name', { ascending: true });
+
+  throwIfError(error);
+  return (data ?? []) as Array<{ id: string; name: string; contact_email: string | null; contact_phone: string | null; payment_terms: string | null }>;
+};
+
+export const createSupplierPurchaseOrderFromSalesOrder = async (payload: {
+  salesOrderId: string;
+  supplierId: string;
+  supplierReference?: string;
+  expectedDelivery?: string;
+  notes?: string;
+}) => {
+  const [{ data: salesOrder, error: orderError }, { data: items, error: itemError }, { data: supplier, error: supplierError }] = await Promise.all([
+    supabase.schema('crm').from('sales_orders').select('id,quotation_id,client_id,currency,payment_terms,issuer,recipient,tax_summary,subtotal,vat_amount,total').eq('id', payload.salesOrderId).single(),
+    supabase.schema('crm').from('sales_order_items').select('description,quantity,supplier_cost,supplier_currency,exchange_rate,landed_aed_cost,margin_pct,unit_price,currency,discount_pct,vat_rate,is_zero_rated,is_exempt,line_total,sort_order').eq('sales_order_id', payload.salesOrderId).order('sort_order', { ascending: true }),
+    supabase.schema('crm').from('clients').select('id,name,contact_email,contact_phone').eq('id', payload.supplierId).single()
+  ]);
+
+  throwIfError(orderError);
+  throwIfError(itemError);
+  throwIfError(supplierError);
+  if (!supplier) throw new Error('Supplier not found.');
+
+  const { data: documentNumber, error: numberError } = await supabase
+    .schema('crm')
+    .rpc('next_document_number', { p_code: 'supplier_purchase_order', p_prefix: 'SPO' });
+  throwIfError(numberError);
+
+  const meta = {
+    supplier_reference: payload.supplierReference?.trim() || null,
+    notes: payload.notes?.trim() || null,
+    quotation_id: (salesOrder as { quotation_id: string | null }).quotation_id,
+    client_id: (salesOrder as { client_id: string }).client_id,
+  };
+
+  const { data: po, error: poError } = await supabase
+    .schema('crm')
+    .from('purchase_orders')
+    .insert({
+      related_sales_order_id: payload.salesOrderId,
+      supplier_id: payload.supplierId,
+      document_number: String(documentNumber),
+      status: 'draft',
+      expected_delivery: payload.expectedDelivery || null,
+      currency: (salesOrder as { currency: string }).currency,
+      payment_terms: (salesOrder as { payment_terms: string | null }).payment_terms,
+      issuer: (salesOrder as { issuer: Record<string, unknown> }).issuer,
+      supplier: {
+        id: supplier.id,
+        name: supplier.name,
+        email: supplier.contact_email,
+        phone: supplier.contact_phone,
+      },
+      meta,
+      tax_summary: (salesOrder as { tax_summary: Record<string, unknown> }).tax_summary,
+      subtotal: (salesOrder as { subtotal: number }).subtotal,
+      vat_amount: (salesOrder as { vat_amount: number }).vat_amount,
+      total: (salesOrder as { total: number }).total,
+      document_snapshot: { source_sales_order_id: payload.salesOrderId }
+    })
+    .select('id')
+    .single();
+  throwIfError(poError);
+  if (!po) throw new Error('Failed to create supplier purchase order.');
+
+  const poItems = (items ?? []).map((line) => ({
+    purchase_order_id: po.id,
+    ...line,
+    unit_price: Number(line.supplier_cost ?? line.unit_price ?? 0),
+  }));
+
+  const { error: insertItemError } = await supabase.schema('crm').from('purchase_order_items').insert(poItems);
+  throwIfError(insertItemError);
+
+  return po.id as string;
+};
+
+export const listSupplierPurchaseOrders = async () => {
+  const { data, error } = await supabase
+    .schema('crm')
+    .from('purchase_orders')
+    .select('id,related_sales_order_id,supplier_id,document_number,status,issue_date,expected_delivery,currency,payment_terms,subtotal,vat_amount,total,created_at,supplier_client:clients!purchase_orders_supplier_id_fkey(name)')
+    .order('created_at', { ascending: false });
+
+  throwIfError(error);
+  return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+    id: String(row.id ?? ''),
+    related_sales_order_id: (row.related_sales_order_id as string | null) ?? null,
+    supplier_id: String(row.supplier_id ?? ''),
+    supplier_name: getRelationName((row.supplier_client as { name: string | null } | Array<{ name: string | null }> | null | undefined) ?? null),
+    document_number: String(row.document_number ?? ''),
+    status: ((row.status as SupplierPurchaseOrder['status'] | undefined) ?? 'draft'),
+    issue_date: String(row.issue_date ?? ''),
+    expected_delivery: (row.expected_delivery as string | null) ?? null,
+    currency: ((row.currency as SupplierPurchaseOrder['currency'] | undefined) ?? 'AED'),
+    payment_terms: (row.payment_terms as string | null) ?? null,
+    subtotal: Number(row.subtotal ?? 0),
+    vat_amount: Number(row.vat_amount ?? 0),
+    total: Number(row.total ?? 0),
+    created_at: String(row.created_at ?? ''),
+  }));
+};
+
+export const getSupplierPurchaseOrderDetail = async (id: string) => {
+  const [{ data: po, error: poError }, { data: lines, error: linesError }] = await Promise.all([
+    supabase
+      .schema('crm')
+      .from('purchase_orders')
+      .select('id,related_sales_order_id,supplier_id,document_number,status,issue_date,expected_delivery,currency,payment_terms,subtotal,vat_amount,total,created_at,supplier_client:clients!purchase_orders_supplier_id_fkey(name)')
+      .eq('id', id)
+      .single(),
+    supabase
+      .schema('crm')
+      .from('purchase_order_items')
+      .select('id,purchase_order_id,description,quantity,supplier_cost,supplier_currency,unit_price,currency,vat_rate,line_total,sort_order')
+      .eq('purchase_order_id', id)
+      .order('sort_order', { ascending: true })
+  ]);
+
+  throwIfError(poError);
+  throwIfError(linesError);
+  if (!po) throw new Error('Supplier purchase order not found.');
+
+  const supplierName = getRelationName((po as Record<string, unknown>).supplier_client as { name: string | null } | Array<{ name: string | null }> | null | undefined);
+
+  return {
+    purchaseOrder: {
+      id: String(po.id ?? ''),
+      related_sales_order_id: (po.related_sales_order_id as string | null) ?? null,
+      supplier_id: String(po.supplier_id ?? ''),
+      supplier_name: supplierName,
+      document_number: String(po.document_number ?? ''),
+      status: ((po.status as SupplierPurchaseOrder['status'] | undefined) ?? 'draft'),
+      issue_date: String(po.issue_date ?? ''),
+      expected_delivery: (po.expected_delivery as string | null) ?? null,
+      currency: ((po.currency as SupplierPurchaseOrder['currency'] | undefined) ?? 'AED'),
+      payment_terms: (po.payment_terms as string | null) ?? null,
+      subtotal: Number(po.subtotal ?? 0),
+      vat_amount: Number(po.vat_amount ?? 0),
+      total: Number(po.total ?? 0),
+      created_at: String(po.created_at ?? ''),
+    },
+    lines: (lines ?? []) as SupplierPurchaseOrderLine[]
+  };
 };
 
 export const listInvoices = async () => {

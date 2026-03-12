@@ -11,6 +11,7 @@ const navItems = [
   { to: '/clients', label: 'Clients' },
   { to: '/vendors', label: 'Vendors' },
   { to: '/dashboard/sales-orders', label: 'Sale Orders' },
+  { to: '/dashboard/supplier-purchase-orders', label: 'Supplier POs' },
   { to: '/dashboard/invoices', label: 'Invoices' },
   { to: '/logistics', label: 'Logistics' },
   { to: '/reporting', label: 'Reporting' },

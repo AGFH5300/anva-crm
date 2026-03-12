@@ -182,6 +182,37 @@ export type SalesOrderLine = {
   sort_order: number;
 };
 
+export type SupplierPurchaseOrder = {
+  id: string;
+  related_sales_order_id: string | null;
+  supplier_id: string;
+  supplier_name?: string | null;
+  document_number: string;
+  status: 'draft' | 'issued' | 'received' | 'closed' | 'cancelled';
+  issue_date: string;
+  expected_delivery: string | null;
+  currency: CurrencyCode;
+  payment_terms: string | null;
+  subtotal: number;
+  vat_amount: number;
+  total: number;
+  created_at: string;
+};
+
+export type SupplierPurchaseOrderLine = {
+  id: string;
+  purchase_order_id: string;
+  description: string;
+  quantity: number;
+  supplier_cost: number;
+  supplier_currency: CurrencyCode;
+  unit_price: number;
+  currency: CurrencyCode;
+  vat_rate: number;
+  line_total: number;
+  sort_order: number;
+};
+
 
 export type Supplier = {
   id: string;
