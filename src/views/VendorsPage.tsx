@@ -6,8 +6,10 @@ import { listVendorDirectory } from '@/lib/crmApi';
 type DirectoryRow = {
   id: string | null;
   name: string | null;
+  contact_person: string | null;
   email: string | null;
   phone: string | null;
+  country: string | null;
   type: string | null;
   status: string | null;
 };
@@ -29,21 +31,25 @@ const VendorsPage = () => {
           <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-3 py-2">Vendor Name</th>
-                            <th className="px-3 py-2">Email</th>
+              <th className="px-3 py-2">Contact Person</th>
+              <th className="px-3 py-2">Email</th>
               <th className="px-3 py-2">Phone</th>
-                            <th className="px-3 py-2">Status / Type</th>
+              <th className="px-3 py-2">Country</th>
+              <th className="px-3 py-2">Status / Type</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((vendor, index) => (
               <tr key={vendor.id || `${vendor.name || 'vendor'}-${index}`} className="border-t border-slate-100 hover:bg-slate-50">
                 <td className="px-3 py-2 font-medium text-slate-900">{vendor.name || '-'}</td>
-                                <td className="px-3 py-2">{vendor.email || '-'}</td>
+                <td className="px-3 py-2">{vendor.contact_person || '-'}</td>
+                <td className="px-3 py-2">{vendor.email || '-'}</td>
                 <td className="px-3 py-2">{vendor.phone || '-'}</td>
-                                <td className="px-3 py-2">{vendor.status || vendor.type || '-'}</td>
+                <td className="px-3 py-2">{vendor.country || '-'}</td>
+                <td className="px-3 py-2">{vendor.status || vendor.type || '-'}</td>
               </tr>
             ))}
-            {!rows.length ? <tr><td className="px-3 py-4 text-sm text-slate-500" colSpan={4}>No vendors found.</td></tr> : null}
+            {!rows.length ? <tr><td className="px-3 py-4 text-sm text-slate-500" colSpan={6}>No vendors found.</td></tr> : null}
           </tbody>
         </table>
       </div>
