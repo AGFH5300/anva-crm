@@ -37,7 +37,7 @@ const SupplierPurchaseOrdersListPage = () => {
                 <td className="px-3 py-2 font-semibold text-slate-900"><Link href={`/dashboard/supplier-purchase-orders/${po.id}`} className="text-primary hover:underline">{po.document_number}</Link></td>
                 <td className="px-3 py-2">{formatIsoDate(po.issue_date)}</td>
                 <td className="px-3 py-2">{po.supplier_name || '-'}</td>
-                <td className="px-3 py-2">{po.related_sales_order_id || '-'}</td>
+                <td className="px-3 py-2">{po.related_sales_order_document_number || po.related_sales_order_id || '-'}</td>
                 <td className="px-3 py-2">{po.expected_delivery ? formatIsoDate(po.expected_delivery) : '-'}</td>
                 <td className="px-3 py-2">{po.currency} {po.total.toFixed(2)}</td>
                 <td className="px-3 py-2 uppercase">{po.status}</td>

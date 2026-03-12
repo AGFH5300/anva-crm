@@ -24,6 +24,7 @@ import type {
   Supplier,
   SupplierPurchaseOrder,
   SupplierPurchaseOrderLine,
+  SupplierPurchaseOrderStatus,
   SupplierRfqDocument
 } from '@/types/crm';
 
@@ -779,7 +780,7 @@ export const getSalesOrderDetail = async (id: string) => {
     supabase
       .schema('crm')
       .from('sales_order_items')
-      .select('id, sales_order_id, description, quantity, unit_price, currency, vat_rate, is_zero_rated, is_exempt, line_total, sort_order')
+      .select('id, sales_order_id, description, quantity, supplier_cost, supplier_currency, unit_price, currency, vat_rate, is_zero_rated, is_exempt, line_total, sort_order')
       .eq('sales_order_id', id)
       .order('sort_order')
   ]);
@@ -1112,10 +1113,18 @@ export const createSupplierPurchaseOrderFromSalesOrder = async (payload: {
   supplierReference?: string;
   expectedDelivery?: string;
   notes?: string;
+  lineItems?: Array<{
+    sourceSalesOrderItemId: string;
+    description: string;
+    quantity: number;
+    supplierCost?: number;
+    supplierCurrency?: string;
+    vatRate?: number;
+  }>;
 }) => {
   const [{ data: salesOrder, error: orderError }, { data: items, error: itemError }, { data: supplier, error: supplierError }] = await Promise.all([
     supabase.schema('crm').from('sales_orders').select('id,quotation_id,client_id,currency,payment_terms,issuer,recipient,tax_summary,subtotal,vat_amount,total').eq('id', payload.salesOrderId).single(),
-    supabase.schema('crm').from('sales_order_items').select('description,quantity,supplier_cost,supplier_currency,exchange_rate,landed_aed_cost,margin_pct,unit_price,currency,discount_pct,vat_rate,is_zero_rated,is_exempt,line_total,sort_order').eq('sales_order_id', payload.salesOrderId).order('sort_order', { ascending: true }),
+    supabase.schema('crm').from('sales_order_items').select('id,description,quantity,supplier_cost,supplier_currency,exchange_rate,landed_aed_cost,margin_pct,unit_price,currency,discount_pct,vat_rate,is_zero_rated,is_exempt,line_total,sort_order').eq('sales_order_id', payload.salesOrderId).order('sort_order', { ascending: true }),
     supabase.schema('crm').from('clients').select('id,name,contact_email,contact_phone').eq('id', payload.supplierId).single()
   ]);
 
@@ -1166,14 +1175,67 @@ export const createSupplierPurchaseOrderFromSalesOrder = async (payload: {
   throwIfError(poError);
   if (!po) throw new Error('Failed to create supplier purchase order.');
 
-  const poItems = (items ?? []).map((line) => ({
-    purchase_order_id: po.id,
-    ...line,
-    unit_price: Number(line.supplier_cost ?? line.unit_price ?? 0),
-  }));
+  const selectedItems = payload.lineItems?.length
+    ? payload.lineItems
+    : (items ?? []).map((line) => ({
+      sourceSalesOrderItemId: String(line.id),
+      description: String(line.description ?? ''),
+      quantity: Number(line.quantity ?? 0),
+      supplierCost: Number(line.supplier_cost ?? 0),
+      supplierCurrency: String(line.supplier_currency ?? 'AED'),
+      vatRate: Number(line.vat_rate ?? 0),
+    }));
+
+  if (!selectedItems.length) {
+    throw new Error('Cannot create supplier purchase order without at least one line item.');
+  }
+
+  const poItems = selectedItems.map((line, index) => {
+    const quantity = Number(line.quantity ?? 0);
+    const supplierCost = Number(line.supplierCost ?? 0);
+    const vatRate = Number(line.vatRate ?? 0);
+    const lineBase = quantity * supplierCost;
+    const vatAmount = lineBase * (vatRate / 100);
+    const lineTotal = Number((lineBase + vatAmount).toFixed(2));
+
+    return {
+      purchase_order_id: po.id,
+      source_sales_order_item_id: line.sourceSalesOrderItemId,
+      description: line.description,
+      quantity,
+      supplier_cost: supplierCost,
+      supplier_currency: String(line.supplierCurrency ?? 'AED'),
+      exchange_rate: 1,
+      landed_aed_cost: supplierCost,
+      margin_pct: 0,
+      unit_price: supplierCost,
+      currency: String(line.supplierCurrency ?? 'AED'),
+      discount_pct: 0,
+      vat_rate: vatRate,
+      is_zero_rated: vatRate === 0,
+      is_exempt: false,
+      line_total: lineTotal,
+      sort_order: index + 1,
+    };
+  });
+
+  const subtotal = poItems.reduce((sum, line) => sum + (line.quantity * line.supplier_cost), 0);
+  const total = poItems.reduce((sum, line) => sum + line.line_total, 0);
+  const vatAmount = Number((total - subtotal).toFixed(2));
 
   const { error: insertItemError } = await supabase.schema('crm').from('purchase_order_items').insert(poItems);
   throwIfError(insertItemError);
+
+  const { error: updatePoError } = await supabase
+    .schema('crm')
+    .from('purchase_orders')
+    .update({
+      subtotal: Number(subtotal.toFixed(2)),
+      vat_amount: vatAmount,
+      total: Number(total.toFixed(2)),
+    })
+    .eq('id', po.id);
+  throwIfError(updatePoError);
 
   return po.id as string;
 };
@@ -1182,26 +1244,35 @@ export const listSupplierPurchaseOrders = async () => {
   const { data, error } = await supabase
     .schema('crm')
     .from('purchase_orders')
-    .select('id,related_sales_order_id,supplier_id,document_number,status,issue_date,expected_delivery,currency,payment_terms,subtotal,vat_amount,total,created_at,supplier_client:clients!purchase_orders_supplier_id_fkey(name)')
+    .select('id,related_sales_order_id,supplier_id,document_number,status,issue_date,expected_delivery,currency,payment_terms,meta,subtotal,vat_amount,total,created_at,supplier_client:clients!purchase_orders_supplier_id_fkey(name),sales_order:sales_orders!purchase_orders_related_sales_order_id_fkey(document_number)')
     .order('created_at', { ascending: false });
 
   throwIfError(error);
-  return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
-    id: String(row.id ?? ''),
-    related_sales_order_id: (row.related_sales_order_id as string | null) ?? null,
-    supplier_id: String(row.supplier_id ?? ''),
-    supplier_name: getRelationName((row.supplier_client as { name: string | null } | Array<{ name: string | null }> | null | undefined) ?? null),
-    document_number: String(row.document_number ?? ''),
-    status: ((row.status as SupplierPurchaseOrder['status'] | undefined) ?? 'draft'),
-    issue_date: String(row.issue_date ?? ''),
-    expected_delivery: (row.expected_delivery as string | null) ?? null,
-    currency: ((row.currency as SupplierPurchaseOrder['currency'] | undefined) ?? 'AED'),
-    payment_terms: (row.payment_terms as string | null) ?? null,
-    subtotal: Number(row.subtotal ?? 0),
-    vat_amount: Number(row.vat_amount ?? 0),
-    total: Number(row.total ?? 0),
-    created_at: String(row.created_at ?? ''),
-  }));
+  return ((data ?? []) as Array<Record<string, unknown>>).map((row) => {
+    const salesOrder = row.sales_order as { document_number: string | null } | Array<{ document_number: string | null }> | null | undefined;
+    const salesOrderDocument = Array.isArray(salesOrder) ? (salesOrder[0]?.document_number ?? null) : (salesOrder?.document_number ?? null);
+    const poMeta = (row.meta as { supplier_reference?: string | null; notes?: string | null } | null | undefined) ?? null;
+
+    return {
+      id: String(row.id ?? ''),
+      related_sales_order_id: (row.related_sales_order_id as string | null) ?? null,
+      related_sales_order_document_number: salesOrderDocument,
+      supplier_id: String(row.supplier_id ?? ''),
+      supplier_name: getRelationName((row.supplier_client as { name: string | null } | Array<{ name: string | null }> | null | undefined) ?? null),
+      document_number: String(row.document_number ?? ''),
+      status: ((row.status as SupplierPurchaseOrderStatus | undefined) ?? 'draft'),
+      issue_date: String(row.issue_date ?? ''),
+      expected_delivery: (row.expected_delivery as string | null) ?? null,
+      vendor_reference: poMeta?.supplier_reference ?? null,
+      notes: poMeta?.notes ?? null,
+      currency: ((row.currency as SupplierPurchaseOrder['currency'] | undefined) ?? 'AED'),
+      payment_terms: (row.payment_terms as string | null) ?? null,
+      subtotal: Number(row.subtotal ?? 0),
+      vat_amount: Number(row.vat_amount ?? 0),
+      total: Number(row.total ?? 0),
+      created_at: String(row.created_at ?? ''),
+    };
+  });
 };
 
 export const getSupplierPurchaseOrderDetail = async (id: string) => {
@@ -1209,13 +1280,13 @@ export const getSupplierPurchaseOrderDetail = async (id: string) => {
     supabase
       .schema('crm')
       .from('purchase_orders')
-      .select('id,related_sales_order_id,supplier_id,document_number,status,issue_date,expected_delivery,currency,payment_terms,subtotal,vat_amount,total,created_at,supplier_client:clients!purchase_orders_supplier_id_fkey(name)')
+      .select('id,related_sales_order_id,supplier_id,document_number,status,issue_date,expected_delivery,currency,payment_terms,meta,subtotal,vat_amount,total,created_at,supplier_client:clients!purchase_orders_supplier_id_fkey(name),sales_order:sales_orders!purchase_orders_related_sales_order_id_fkey(document_number)')
       .eq('id', id)
       .single(),
     supabase
       .schema('crm')
       .from('purchase_order_items')
-      .select('id,purchase_order_id,description,quantity,supplier_cost,supplier_currency,unit_price,currency,vat_rate,line_total,sort_order')
+      .select('id,purchase_order_id,source_sales_order_item_id,description,quantity,supplier_cost,supplier_currency,unit_price,currency,vat_rate,line_total,sort_order')
       .eq('purchase_order_id', id)
       .order('sort_order', { ascending: true })
   ]);
@@ -1225,17 +1296,23 @@ export const getSupplierPurchaseOrderDetail = async (id: string) => {
   if (!po) throw new Error('Supplier purchase order not found.');
 
   const supplierName = getRelationName((po as Record<string, unknown>).supplier_client as { name: string | null } | Array<{ name: string | null }> | null | undefined);
+  const salesOrder = (po as Record<string, unknown>).sales_order as { document_number: string | null } | Array<{ document_number: string | null }> | null | undefined;
+  const relatedSalesOrderDocument = Array.isArray(salesOrder) ? (salesOrder[0]?.document_number ?? null) : (salesOrder?.document_number ?? null);
+  const poMeta = (po.meta as { supplier_reference?: string | null; notes?: string | null } | null | undefined) ?? null;
 
   return {
     purchaseOrder: {
       id: String(po.id ?? ''),
       related_sales_order_id: (po.related_sales_order_id as string | null) ?? null,
+      related_sales_order_document_number: relatedSalesOrderDocument,
       supplier_id: String(po.supplier_id ?? ''),
       supplier_name: supplierName,
       document_number: String(po.document_number ?? ''),
-      status: ((po.status as SupplierPurchaseOrder['status'] | undefined) ?? 'draft'),
+      status: ((po.status as SupplierPurchaseOrderStatus | undefined) ?? 'draft'),
       issue_date: String(po.issue_date ?? ''),
       expected_delivery: (po.expected_delivery as string | null) ?? null,
+      vendor_reference: poMeta?.supplier_reference ?? null,
+      notes: poMeta?.notes ?? null,
       currency: ((po.currency as SupplierPurchaseOrder['currency'] | undefined) ?? 'AED'),
       payment_terms: (po.payment_terms as string | null) ?? null,
       subtotal: Number(po.subtotal ?? 0),
@@ -1245,6 +1322,23 @@ export const getSupplierPurchaseOrderDetail = async (id: string) => {
     },
     lines: (lines ?? []) as SupplierPurchaseOrderLine[]
   };
+};
+
+
+
+export const listSupplierPurchaseOrdersBySalesOrder = async (salesOrderId: string) => {
+  const rows = await listSupplierPurchaseOrders();
+  return rows.filter((row) => row.related_sales_order_id === salesOrderId);
+};
+
+export const updateSupplierPurchaseOrderStatus = async (purchaseOrderId: string, status: SupplierPurchaseOrderStatus) => {
+  const { error } = await supabase
+    .schema('crm')
+    .from('purchase_orders')
+    .update({ status })
+    .eq('id', purchaseOrderId);
+
+  throwIfError(error);
 };
 
 export const listInvoices = async () => {

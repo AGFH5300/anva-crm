@@ -442,7 +442,7 @@ create table if not exists crm.purchase_orders (
   related_sales_order_id uuid references crm.sales_orders (id) on delete set null,
   supplier_id uuid not null references crm.clients (id) on delete cascade,
   document_number text not null unique,
-  status text not null default 'draft' check (status in ('draft', 'issued', 'received', 'closed', 'cancelled')),
+  status text not null default 'draft' check (status in ('draft', 'sent', 'confirmed', 'partially_received', 'received', 'cancelled')),
   issue_date date not null default current_date,
   expected_delivery date,
   currency text not null default 'AED',
@@ -469,6 +469,7 @@ create index if not exists idx_purchase_orders_status on crm.purchase_orders (st
 create table if not exists crm.purchase_order_items (
   id uuid primary key default gen_random_uuid(),
   purchase_order_id uuid not null references crm.purchase_orders (id) on delete cascade,
+  source_sales_order_item_id uuid references crm.sales_order_items (id) on delete set null,
   product_id uuid references crm.products (id) on delete set null,
   description text not null,
   quantity numeric(14, 3) not null check (quantity >= 0),
@@ -488,6 +489,7 @@ create table if not exists crm.purchase_order_items (
 );
 
 create index if not exists idx_purchase_order_items_order on crm.purchase_order_items (purchase_order_id);
+create index if not exists idx_purchase_order_items_source_sales_order_item on crm.purchase_order_items (source_sales_order_item_id);
 
 create table if not exists crm.invoices (
   id uuid primary key default gen_random_uuid(),

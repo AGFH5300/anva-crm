@@ -173,6 +173,8 @@ export type SalesOrderLine = {
   sales_order_id: string;
   description: string;
   quantity: number;
+  supplier_cost: number;
+  supplier_currency: CurrencyCode;
   unit_price: number;
   currency: CurrencyCode;
   vat_rate: number;
@@ -182,15 +184,20 @@ export type SalesOrderLine = {
   sort_order: number;
 };
 
+export type SupplierPurchaseOrderStatus = 'draft' | 'sent' | 'confirmed' | 'partially_received' | 'received' | 'cancelled';
+
 export type SupplierPurchaseOrder = {
   id: string;
   related_sales_order_id: string | null;
+  related_sales_order_document_number?: string | null;
   supplier_id: string;
   supplier_name?: string | null;
   document_number: string;
-  status: 'draft' | 'issued' | 'received' | 'closed' | 'cancelled';
+  status: SupplierPurchaseOrderStatus;
   issue_date: string;
   expected_delivery: string | null;
+  vendor_reference?: string | null;
+  notes?: string | null;
   currency: CurrencyCode;
   payment_terms: string | null;
   subtotal: number;
@@ -202,6 +209,7 @@ export type SupplierPurchaseOrder = {
 export type SupplierPurchaseOrderLine = {
   id: string;
   purchase_order_id: string;
+  source_sales_order_item_id: string | null;
   description: string;
   quantity: number;
   supplier_cost: number;
