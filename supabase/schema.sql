@@ -550,6 +550,31 @@ create table if not exists crm.invoice_items (
 
 create index if not exists idx_invoice_items_invoice on crm.invoice_items (invoice_id);
 
+create or replace view crm.v_enquiries_master_registry as
+select e.id, e.job_number, e.enquiry_date, e.client_id, c.name as client_name, e.client_reference_number, e.status, e.created_at
+from crm.enquiries e
+left join crm.clients c on c.id = e.client_id;
+
+create or replace view crm.v_quotations_master_registry as
+select q.id, q.enquiry_id, q.document_number, q.client_id, c.name as client_name, q.client_reference_number,
+       q.customer_reference, q.status, q.total, q.created_at
+from crm.quotations q
+left join crm.clients c on c.id = q.client_id;
+
+create or replace view crm.v_sales_orders_master_registry as
+select so.id, so.quotation_id, so.document_number, q.document_number as quotation_document_number,
+       so.client_id, c.name as client_name, so.client_reference_number, so.client_po_number,
+       so.status, so.total, so.issue_date, so.created_at
+from crm.sales_orders so
+left join crm.quotations q on q.id = so.quotation_id
+left join crm.clients c on c.id = so.client_id;
+
+create or replace view crm.v_invoices_master_registry as
+select i.id, i.sales_order_id, i.document_number, i.client_id, c.name as client_name,
+       i.client_po_number, i.status, i.total, i.issue_date, i.created_at
+from crm.invoices i
+left join crm.clients c on c.id = i.client_id;
+
 create table if not exists crm.payments (
   id uuid primary key default gen_random_uuid(),
   invoice_id uuid not null references crm.invoices (id) on delete cascade,

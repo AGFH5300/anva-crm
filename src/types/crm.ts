@@ -161,6 +161,8 @@ export type Invoice = {
   status: 'draft' | 'issued' | 'paid' | 'overdue' | 'cancelled';
   issue_date: string;
   due_date: string | null;
+  payment_terms?: string | null;
+  sales_order_document_number?: string | null;
   currency: CurrencyCode;
   total: number;
   balance_due: number;
@@ -274,4 +276,17 @@ export type CompanyDocumentSettings = {
   logo_url: string | null;
   stamp_url: string | null;
   updated_at: string;
+};
+
+
+export type InvoiceLine = {
+  id: string;
+  invoice_id: string;
+  description: string;
+  quantity: number;
+  unit_price: number;
+  currency: CurrencyCode;
+  vat_rate: number;
+  line_total: number;
+  sort_order: number;
 };

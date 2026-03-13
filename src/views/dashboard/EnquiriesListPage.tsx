@@ -19,12 +19,16 @@ const EnquiriesListPage = () => {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-slate-900">Enquiries</h1>
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">Enquiries</h1>
+          <p className="text-xs text-slate-500">Operational pipeline (active-stage enquiries only).</p>
+        </div>
         <Link href="/dashboard/enquiries/new" className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-white">
           New enquiry
         </Link>
       </div>
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      <Link href="/dashboard/archive?type=enquiries" className="inline-flex rounded-md border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700">Open all enquiries archive</Link>
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
         <table className="min-w-full table-auto text-left text-xs text-slate-600">
           <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">

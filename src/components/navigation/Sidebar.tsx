@@ -13,6 +13,7 @@ const navItems = [
   { to: '/dashboard/sales-orders', label: 'Sale Orders' },
   { to: '/dashboard/supplier-purchase-orders', label: 'Supplier POs' },
   { to: '/dashboard/invoices', label: 'Invoices' },
+  { to: '/dashboard/archive', label: 'Archive / Master Data' },
   { to: '/logistics', label: 'Logistics' },
   { to: '/reporting', label: 'Reporting' },
   { to: '/settings', label: 'Settings' }
