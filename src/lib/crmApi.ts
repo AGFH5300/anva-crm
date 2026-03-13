@@ -758,15 +758,60 @@ export const convertQuotationToSalesOrder = async (quotationId: string, clientPo
 
   throwIfError(error);
 
-  if (typeof data === 'string') {
-    return data;
+  const resolveSalesOrderId = () => {
+    if (typeof data === 'string') {
+      return data;
+    }
+
+    if (data && typeof data === 'object' && 'id' in (data as Record<string, unknown>) && typeof (data as Record<string, unknown>).id === 'string') {
+      return (data as { id: string }).id;
+    }
+
+    throw new Error('Quotation conversion RPC returned an unsupported payload. Expected sales order id as uuid text or { id }.');
+  };
+
+  const salesOrderId = resolveSalesOrderId();
+
+  const { data: salesOrder, error: salesOrderError } = await supabase
+    .schema('crm')
+    .from('sales_orders')
+    .select('id,document_number,status,quotation_id,client_id')
+    .eq('id', salesOrderId)
+    .single();
+
+  if (salesOrderError) {
+    throw new Error(`Quotation conversion returned sales order id ${salesOrderId}, but crm.sales_orders lookup failed: ${salesOrderError.message}`);
   }
 
-  if (data && typeof data === 'object' && 'id' in (data as Record<string, unknown>) && typeof (data as Record<string, unknown>).id === 'string') {
-    return (data as { id: string }).id;
+  if (!salesOrder?.document_number) {
+    throw new Error(`Sales order ${salesOrderId} was created/found without a document number, so list visibility cannot be guaranteed.`);
   }
 
-  throw new Error('Quotation conversion RPC returned an unsupported payload. Expected sales order id as uuid text or { id }.');
+  const { count: salesOrderLineCount, error: lineCountError } = await supabase
+    .schema('crm')
+    .from('sales_order_items')
+    .select('id', { count: 'exact', head: true })
+    .eq('sales_order_id', salesOrderId);
+
+  if (lineCountError) {
+    throw new Error(`Sales order ${salesOrderId} exists, but crm.sales_order_items validation failed: ${lineCountError.message}`);
+  }
+
+  const { count: quotationLineCount, error: quotationLineCountError } = await supabase
+    .schema('crm')
+    .from('quotation_items')
+    .select('id', { count: 'exact', head: true })
+    .eq('quotation_id', quotationId);
+
+  if (quotationLineCountError) {
+    throw new Error(`Sales order ${salesOrderId} exists, but crm.quotation_items validation failed: ${quotationLineCountError.message}`);
+  }
+
+  if ((quotationLineCount ?? 0) > 0 && (salesOrderLineCount ?? 0) === 0) {
+    throw new Error(`Sales order ${salesOrderId} was created but has no lines, while quotation ${quotationId} has ${quotationLineCount} lines.`);
+  }
+
+  return salesOrderId;
 };
 
 export const getSalesOrderDetail = async (id: string) => {
@@ -774,7 +819,7 @@ export const getSalesOrderDetail = async (id: string) => {
     supabase
       .schema('crm')
       .from('sales_orders')
-      .select('id, quotation_id, client_id, document_number, status, issue_date, currency, subtotal, vat_amount, total, terms_and_conditions, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, validity, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, client_reference_number, client_po_number, created_at')
+      .select('id, quotation_id, client_id, document_number, status, issue_date, currency, subtotal, vat_amount, total, terms_and_conditions, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, validity, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, client_reference_number, client_po_number, created_at, client:clients(name), quotation:quotations(document_number)')
       .eq('id', id)
       .single(),
     supabase
@@ -788,8 +833,19 @@ export const getSalesOrderDetail = async (id: string) => {
   throwIfError(orderError);
   throwIfError(linesError);
 
+  const orderRow = (order ?? {}) as SalesOrder & {
+    client?: { name: string | null } | Array<{ name: string | null }> | null;
+    quotation?: { document_number: string | null } | Array<{ document_number: string | null }> | null;
+  };
+
   return {
-    order: order as SalesOrder,
+    order: {
+      ...orderRow,
+      client_name: getRelationName(orderRow.client) ?? null,
+      quotation_document_number: Array.isArray(orderRow.quotation)
+        ? (orderRow.quotation[0]?.document_number ?? null)
+        : (orderRow.quotation?.document_number ?? null)
+    },
     lines: (lines ?? []) as SalesOrderLine[]
   };
 };
@@ -1055,7 +1111,6 @@ export type DashboardStageCounts = {
 
 const ACTIVE_ENQUIRY_STATUSES: Enquiry['status'][] = ['new', 'qualified', 'proposal', 'negotiation'];
 const ACTIVE_QUOTATION_STATUSES: Quotation['status'][] = ['draft', 'sent'];
-const ACTIVE_SALES_ORDER_STATUSES: SalesOrder['status'][] = ['draft', 'confirmed', 'in-progress'];
 const ACTIVE_INVOICE_STATUSES: Invoice['status'][] = ['draft', 'issued', 'overdue'];
 
 export const getDashboardStageCounts = async (): Promise<DashboardStageCounts> => {
@@ -1079,7 +1134,6 @@ export const listSalesOrders = async () => {
     .schema('crm')
     .from('sales_orders')
     .select('id, quotation_id, client_id, document_number, status, issue_date, currency, subtotal, vat_amount, total, client_reference_number, client_po_number, created_at, client:clients(name), quotation:quotations(document_number)')
-    .in('status', ACTIVE_SALES_ORDER_STATUSES)
     .order('created_at', { ascending: false });
 
   throwIfError(error);

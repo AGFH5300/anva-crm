@@ -152,6 +152,7 @@ const SalesOrderDetailPage = ({ id }: SalesOrderDetailPageProps) => {
       {invoiceId ? <p className="text-sm text-emerald-700">Invoice created: {invoiceId}</p> : null}
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       <Link className="text-sm text-primary underline" href="/dashboard/sales-orders">Back to sale orders</Link>
+      <p className="text-sm text-slate-600">Quotation reference: <span className="font-medium">{order.quotation_document_number || '-'}</span></p>
       <p className="text-sm text-slate-600">Client reference number: <span className="font-medium">{order.client_reference_number || '-'}</span></p>
 
       <div className="grid gap-2 text-sm text-slate-700 md:grid-cols-2">
