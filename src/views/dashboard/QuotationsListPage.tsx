@@ -25,9 +25,13 @@ const QuotationsListPage = () => {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold text-slate-900">Quotations</h1>
+      <div>
+        <h1 className="text-2xl font-semibold text-slate-900">Quotations</h1>
+        <p className="text-xs text-slate-500">Operational pipeline (active quotations not yet converted).</p>
+      </div>
       {createdMessage ? <p className="text-sm text-emerald-700">{createdMessage}</p> : null}
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      <Link href="/dashboard/archive?type=quotations" className="inline-flex rounded-md border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700">Open all quotations archive</Link>
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
         <table className="min-w-full table-auto text-left text-xs text-slate-600">
           <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
