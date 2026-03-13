@@ -16,7 +16,7 @@ const SalesOrdersListPage = () => {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold text-slate-900">Sale Orders</h1>
+      <h1 className="text-2xl font-semibold text-slate-900">Sales Orders</h1>
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
         <table className="min-w-full table-auto text-left text-xs text-slate-600">
@@ -43,7 +43,7 @@ const SalesOrdersListPage = () => {
                 <td className="px-3 py-2 uppercase">{item.status}</td>
               </tr>
             ))}
-            {!rows.length ? <tr><td className="px-3 py-4 text-sm text-slate-500" colSpan={7}>No active sales orders.</td></tr> : null}
+            {!rows.length ? <tr><td className="px-3 py-4 text-sm text-slate-500" colSpan={7}>No sales orders found.</td></tr> : null}
           </tbody>
         </table>
       </div>

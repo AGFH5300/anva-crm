@@ -902,13 +902,16 @@ as $$
 declare
   v_quote crm.quotations%rowtype;
   v_sales_order_id uuid;
+  v_client_po_number text;
 begin
+  v_client_po_number := nullif(trim(coalesce(p_client_po_number, '')), '');
+
   select * into v_quote
   from crm.quotations
   where id = p_quotation_id;
 
   if v_quote.id is null then
-    raise exception 'Quotation % not found', p_quotation_id;
+    raise exception 'Quotation % not found in crm.quotations', p_quotation_id;
   end if;
 
   select so.id into v_sales_order_id
@@ -919,7 +922,7 @@ begin
 
   if v_sales_order_id is not null then
     update crm.sales_orders
-    set client_po_number = coalesce(nullif(trim(p_client_po_number), ''), client_po_number)
+    set client_po_number = coalesce(v_client_po_number, client_po_number)
     where id = v_sales_order_id;
 
     return v_sales_order_id;
@@ -982,7 +985,7 @@ begin
     coalesce(v_quote.stamp_enabled, true),
     coalesce(v_quote.signature_enabled, true),
     coalesce(v_quote.client_reference_number, v_quote.customer_reference),
-    nullif(trim(p_client_po_number), ''),
+    v_client_po_number,
     v_quote.issuer,
     v_quote.recipient,
     coalesce(v_quote.meta, '{}'::jsonb),
