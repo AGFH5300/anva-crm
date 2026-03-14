@@ -97,8 +97,7 @@ const SalesOrderDetailPage = ({ id }: SalesOrderDetailPageProps) => {
             setSupplierWarning((current) => current ?? supplierLookupWarnings[0]);
           }
         } else {
-          const message = supplierPoResult.reason instanceof Error ? supplierPoResult.reason.message : String(supplierPoResult.reason);
-          setSupplierWarning((current) => current ?? `Linked supplier POs could not be loaded: ${message}`);
+          setSupplierWarning((current) => current ?? 'Linked vendor POs are temporarily unavailable.');
           if (process.env.NODE_ENV !== 'production') {
             console.error('[CRM] SalesOrderDetailPage supplier PO fetch error', supplierPoResult.reason);
           }
