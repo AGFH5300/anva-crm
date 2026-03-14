@@ -38,7 +38,12 @@ const SupplierQuickAdd = ({ initialCompanyName, onCreated, onCancel }: SupplierQ
       const supplier = await createSupplier({ companyName, contactPerson, email, phone, city, country });
       onCreated(supplier);
     } catch (err) {
-      setError((err as Error).message);
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.toLowerCase().includes('signed in to add suppliers')) {
+        setError('You must be signed in to add suppliers');
+      } else {
+        setError(message);
+      }
     } finally {
       setSaving(false);
     }
