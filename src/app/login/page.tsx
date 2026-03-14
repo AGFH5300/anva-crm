@@ -1,14 +1,17 @@
 'use client';
 
-import { FormEvent, Suspense, useMemo, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { FormEvent, Suspense, useEffect, useMemo, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { useAuthSession } from '@/components/auth/AuthSessionProvider';
 
 const AUTH_ERROR_MESSAGE = 'Unable to sign in. Please check your email and password and try again.';
 
 const LoginPageContent = () => {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { user } = useAuthSession();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -19,6 +22,18 @@ const LoginPageContent = () => {
     if (!next || !next.startsWith('/')) return '/dashboard';
     return next;
   }, [searchParams]);
+
+  useEffect(() => {
+    // TEMP AUTH DEBUG LOGS - remove after auth routing verification.
+    // eslint-disable-next-line no-console
+    console.log('[AUTH DEBUG][LOGIN][PATH_CHECK]', {
+      pathname,
+      loginRouteMounted: true,
+      hasSession: Boolean(user),
+      requiresAuth: false,
+      redirectTargetWhenAuthenticated: '/dashboard'
+    });
+  }, [pathname, user]);
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -35,6 +50,16 @@ const LoginPageContent = () => {
       setSubmitting(false);
       return;
     }
+
+    // TEMP AUTH DEBUG LOGS - remove after auth routing verification.
+    // eslint-disable-next-line no-console
+    console.log('[AUTH DEBUG][LOGIN][SUCCESS_REDIRECT]', {
+      pathname,
+      loginRouteMounted: true,
+      hasSession: true,
+      requiresAuth: false,
+      redirectTo: nextPath || '/dashboard'
+    });
 
     router.replace(nextPath || '/dashboard');
     router.refresh();
