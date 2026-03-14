@@ -32,7 +32,12 @@ const VendorsPage = () => {
       setNewName('');
       await load();
     } catch (err) {
-      setError((err as Error).message);
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.toLowerCase().includes('signed in')) {
+        setError('You must be signed in to add suppliers.');
+      } else {
+        setError('Unable to add vendor right now. Please try again.');
+      }
     }
   };
 

@@ -40,7 +40,7 @@ const SupplierQuickAdd = ({ initialCompanyName, onCreated, onCancel }: SupplierQ
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (message.toLowerCase().includes('signed in to add suppliers')) {
-        setError('You must be signed in to add suppliers');
+        setError('You must be signed in to add suppliers.');
       } else {
         setError(message);
       }
