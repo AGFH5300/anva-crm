@@ -194,6 +194,7 @@ export type SupplierPurchaseOrder = {
   related_sales_order_document_number?: string | null;
   supplier_id: string;
   supplier_name?: string | null;
+  supplier_lookup_warning?: string | null;
   document_number: string;
   status: SupplierPurchaseOrderStatus;
   issue_date: string;

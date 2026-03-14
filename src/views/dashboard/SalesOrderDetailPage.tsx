@@ -8,7 +8,7 @@ import {
   createSupplierPurchaseOrderFromSalesOrder,
   getSalesOrderDetail,
   listSupplierPurchaseOrdersBySalesOrder,
-  listVendorClients,
+  listSuppliers,
   updateSalesOrderClientPoNumber
 } from '@/lib/crmApi';
 import type { SalesOrder, SalesOrderLine, SupplierPurchaseOrder } from '@/types/crm';
@@ -52,7 +52,7 @@ const SalesOrderDetailPage = ({ id }: SalesOrderDetailPageProps) => {
       console.debug('[CRM] SalesOrderDetailPage fetch start', { id });
     }
 
-    Promise.allSettled([getSalesOrderDetail(id), listVendorClients(), loadSupplierPos()])
+    Promise.allSettled([getSalesOrderDetail(id), listSuppliers(), loadSupplierPos()])
       .then(([orderResult, suppliersResult, supplierPoResult]) => {
         if (orderResult.status === 'fulfilled') {
           const { order, lines } = orderResult.value;
@@ -79,7 +79,7 @@ const SalesOrderDetailPage = ({ id }: SalesOrderDetailPageProps) => {
         }
 
         if (suppliersResult.status === 'fulfilled') {
-          setSupplierOptions(suppliersResult.value.map((item) => ({ id: item.id, name: item.name })));
+          setSupplierOptions(suppliersResult.value.map((item) => ({ id: item.id, name: item.company_name })));
         } else {
           const message = suppliersResult.reason instanceof Error ? suppliersResult.reason.message : String(suppliersResult.reason);
           setSupplierWarning(`Supplier list could not be loaded: ${message}`);
@@ -90,6 +90,12 @@ const SalesOrderDetailPage = ({ id }: SalesOrderDetailPageProps) => {
 
         if (supplierPoResult.status === 'fulfilled') {
           setLinkedSupplierPos(supplierPoResult.value);
+          const supplierLookupWarnings = supplierPoResult.value
+            .map((po) => po.supplier_lookup_warning)
+            .filter((warning): warning is string => Boolean(warning));
+          if (supplierLookupWarnings.length) {
+            setSupplierWarning((current) => current ?? supplierLookupWarnings[0]);
+          }
         } else {
           setSupplierWarning((current) => current ?? 'Linked vendor POs are temporarily unavailable.');
           if (process.env.NODE_ENV !== 'production') {
@@ -223,7 +229,7 @@ const SalesOrderDetailPage = ({ id }: SalesOrderDetailPageProps) => {
             {linkedSupplierPos.map((po) => (
               <p key={po.id} className="text-sm text-slate-700">
                 <Link href={`/dashboard/supplier-purchase-orders/${po.id}`} className="font-medium text-primary underline">{po.document_number}</Link>
-                {' '}• {po.supplier_name || po.supplier_id} • {po.status}
+                {' '}• {po.supplier_name || 'Unknown supplier'} • {po.status}
               </p>
             ))}
           </div>
