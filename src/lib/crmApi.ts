@@ -1183,42 +1183,109 @@ export const getDashboardStageCounts = async (): Promise<DashboardStageCounts> =
   };
 };
 
-const mapSalesOrderRows = (rows: Array<SalesOrder & {
+type SalesOrderRow = Partial<SalesOrder> & {
   client?: { name: string | null } | Array<{ name: string | null }> | null;
   quotation?: { document_number: string | null } | Array<{ document_number: string | null }> | null;
-}>) => rows.map(({ client, quotation, ...item }) => ({
-  ...item,
-  client_name: getRelationName(client) ?? null,
-  quotation_document_number: Array.isArray(quotation) ? (quotation[0]?.document_number ?? null) : (quotation?.document_number ?? null)
-}));
+  client_name?: string | null;
+  quotation_document_number?: string | null;
+};
 
-export const listSalesOrders = async () => {
+const mapSalesOrderRows = (rows: SalesOrderRow[]): SalesOrder[] => rows.map((row) => {
+  const { client, quotation, ...item } = row;
+  const clientNameFromJoin = getRelationName(client);
+  const quotationNumberFromJoin = Array.isArray(quotation) ? (quotation[0]?.document_number ?? null) : (quotation?.document_number ?? null);
+
+  return {
+    id: String(item.id ?? ''),
+    quotation_id: item.quotation_id ?? null,
+    quotation_document_number: item.quotation_document_number ?? quotationNumberFromJoin ?? null,
+    client_id: String(item.client_id ?? ''),
+    client_name: item.client_name ?? clientNameFromJoin ?? null,
+    document_number: String(item.document_number ?? ''),
+    status: (item.status as SalesOrder['status'] | undefined) ?? 'draft',
+    currency: (item.currency as SalesOrder['currency'] | undefined) ?? 'AED',
+    subtotal: Number(item.subtotal ?? 0),
+    vat_amount: Number(item.vat_amount ?? 0),
+    total: Number(item.total ?? 0),
+    terms_and_conditions: item.terms_and_conditions ?? null,
+    delivery_terms: item.delivery_terms ?? null,
+    delivery_time: item.delivery_time ?? null,
+    payment_terms: item.payment_terms ?? null,
+    parts_origin: item.parts_origin ?? null,
+    parts_quality: item.parts_quality ?? null,
+    validity: item.validity ?? null,
+    customer_trn: item.customer_trn ?? null,
+    company_trn: item.company_trn ?? null,
+    pic_details: item.pic_details ?? null,
+    additional_notes: item.additional_notes ?? null,
+    company_letterhead_enabled: item.company_letterhead_enabled ?? false,
+    stamp_enabled: item.stamp_enabled ?? true,
+    signature_enabled: item.signature_enabled ?? true,
+    client_reference_number: item.client_reference_number ?? null,
+    client_po_number: item.client_po_number ?? null,
+    issue_date: String(item.issue_date ?? item.created_at ?? new Date(0).toISOString()),
+    created_at: String(item.created_at ?? new Date(0).toISOString())
+  };
+});
+
+const fetchSalesOrdersFromRegistryView = async () => {
   const { data, error } = await supabase
     .schema('crm')
-    .from('sales_orders')
-    .select('id, quotation_id, client_id, document_number, status, issue_date, currency, subtotal, vat_amount, total, client_reference_number, client_po_number, created_at, client:clients(name), quotation:quotations(document_number)')
-    .in('status', ACTIVE_SALES_ORDER_STATUSES)
+    .from('v_sales_orders_master_registry')
+    .select('id, quotation_id, document_number, quotation_document_number, client_id, client_name, client_reference_number, client_po_number, status, total, issue_date, created_at')
     .order('created_at', { ascending: false });
 
-  throwIfError(error);
-  return mapSalesOrderRows((data ?? []) as Array<SalesOrder & {
-    client?: { name: string | null } | Array<{ name: string | null }> | null;
-    quotation?: { document_number: string | null } | Array<{ document_number: string | null }> | null;
-  }>);
+  return { data, error };
+};
+
+export const listSalesOrders = async () => {
+  try {
+    const registryResponse = await fetchSalesOrdersFromRegistryView();
+    if (!registryResponse.error) {
+      return mapSalesOrderRows(((registryResponse.data ?? []) as SalesOrderRow[])
+        .filter((row) => ACTIVE_SALES_ORDER_STATUSES.includes((row.status as SalesOrder['status'] | undefined) ?? 'draft')));
+    }
+
+    if (!isUndefinedColumnError(registryResponse.error)) {
+      throw registryResponse.error;
+    }
+
+    const { data, error } = await supabase
+      .schema('crm')
+      .from('sales_orders')
+      .select('id, quotation_id, client_id, document_number, status, issue_date, currency, subtotal, vat_amount, total, client_reference_number, client_po_number, created_at, client:clients(name), quotation:quotations(document_number)')
+      .in('status', ACTIVE_SALES_ORDER_STATUSES)
+      .order('created_at', { ascending: false });
+
+    throwIfError(error);
+    return mapSalesOrderRows((data ?? []) as SalesOrderRow[]);
+  } catch (err) {
+    throw formatSupabaseConnectivityError(err, 'load sales orders');
+  }
 };
 
 export const listAllSalesOrders = async () => {
-  const { data, error } = await supabase
-    .schema('crm')
-    .from('sales_orders')
-    .select('id, quotation_id, client_id, document_number, status, issue_date, currency, subtotal, vat_amount, total, client_reference_number, client_po_number, created_at, client:clients(name), quotation:quotations(document_number)')
-    .order('created_at', { ascending: false });
+  try {
+    const registryResponse = await fetchSalesOrdersFromRegistryView();
+    if (!registryResponse.error) {
+      return mapSalesOrderRows((registryResponse.data ?? []) as SalesOrderRow[]);
+    }
 
-  throwIfError(error);
-  return mapSalesOrderRows((data ?? []) as Array<SalesOrder & {
-    client?: { name: string | null } | Array<{ name: string | null }> | null;
-    quotation?: { document_number: string | null } | Array<{ document_number: string | null }> | null;
-  }>);
+    if (!isUndefinedColumnError(registryResponse.error)) {
+      throw registryResponse.error;
+    }
+
+    const { data, error } = await supabase
+      .schema('crm')
+      .from('sales_orders')
+      .select('id, quotation_id, client_id, document_number, status, issue_date, currency, subtotal, vat_amount, total, client_reference_number, client_po_number, created_at, client:clients(name), quotation:quotations(document_number)')
+      .order('created_at', { ascending: false });
+
+    throwIfError(error);
+    return mapSalesOrderRows((data ?? []) as SalesOrderRow[]);
+  } catch (err) {
+    throw formatSupabaseConnectivityError(err, 'load sales order archive');
+  }
 };
 
 export const listVendorClients = async () => {

@@ -9,9 +9,21 @@ import { formatIsoDate } from '@/utils/date';
 const SalesOrdersListPage = () => {
   const [rows, setRows] = useState<SalesOrder[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    listSalesOrders().then(setRows).catch((err: Error) => setError(err.message));
+    listSalesOrders()
+      .then((items) => {
+        setRows(items);
+        if (process.env.NODE_ENV !== 'production') {
+          console.debug('[CRM] SalesOrdersListPage fetched orders', {
+            count: items.length,
+            first: items[0] ?? null,
+          });
+        }
+      })
+      .catch((err: Error) => setError(`Failed to load sale orders: ${err.message}`))
+      .finally(() => setLoading(false));
   }, []);
 
   return (
@@ -36,6 +48,7 @@ const SalesOrdersListPage = () => {
             </tr>
           </thead>
           <tbody>
+            {loading ? <tr><td className="px-3 py-4 text-sm text-slate-500" colSpan={7}>Loading sale orders...</td></tr> : null}
             {rows.map((item) => (
               <tr key={item.id} className="border-t border-slate-100 hover:bg-slate-50">
                 <td className="px-3 py-2 font-semibold text-slate-900"><Link href={`/dashboard/sales-orders/${item.id}`} className="text-primary hover:underline">{item.document_number}</Link></td>
@@ -47,7 +60,7 @@ const SalesOrdersListPage = () => {
                 <td className="px-3 py-2 uppercase">{item.status}</td>
               </tr>
             ))}
-            {!rows.length ? <tr><td className="px-3 py-4 text-sm text-slate-500" colSpan={7}>No sales orders found.</td></tr> : null}
+            {!loading && !rows.length ? <tr><td className="px-3 py-4 text-sm text-slate-500" colSpan={7}>No sales orders found.</td></tr> : null}
           </tbody>
         </table>
       </div>
