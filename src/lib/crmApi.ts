@@ -1563,11 +1563,9 @@ export const listSupplierPurchaseOrders = async () => {
     .order('created_at', { ascending: false });
 
   throwIfError(error);
+  const rows = (purchaseOrders ?? []) as Array<Record<string, unknown>>;
 
-  const rows = (data ?? []) as Array<Record<string, unknown>>;
-  const supplierIds = Array.from(new Set(rows
-    .map((row) => String(row.supplier_id ?? '').trim())
-    .filter((supplierId) => supplierId.length > 0)));
+  const supplierIds = Array.from(new Set(rows.map((row) => String(row.supplier_id ?? '')).filter(Boolean)));
 
   const supplierNameById = new Map<string, string>();
   if (supplierIds.length) {
@@ -1584,47 +1582,10 @@ export const listSupplierPurchaseOrders = async () => {
   }
 
   return rows.map((row) => {
+    const supplierId = String(row.supplier_id ?? '');
     const salesOrder = row.sales_order as { document_number: string | null } | Array<{ document_number: string | null }> | null | undefined;
     const salesOrderDocument = Array.isArray(salesOrder) ? (salesOrder[0]?.document_number ?? null) : (salesOrder?.document_number ?? null);
-    .select('id,related_sales_order_id,supplier_id,document_number,status,issue_date,expected_delivery,currency,payment_terms,meta,subtotal,vat_amount,total,created_at')
-    .order('created_at', { ascending: false });
-
-  throwIfError(error);
-  const rows = (purchaseOrders ?? []) as Array<Record<string, unknown>>;
-
-  const supplierIds = Array.from(new Set(rows.map((row) => String(row.supplier_id ?? '')).filter(Boolean)));
-  const salesOrderIds = Array.from(new Set(rows.map((row) => String(row.related_sales_order_id ?? '')).filter(Boolean)));
-
-  const [supplierResult, salesOrderResult] = await Promise.all([
-    supplierIds.length > 0
-      ? supabase.schema('crm').from('suppliers').select('id,company_name').in('id', supplierIds)
-      : Promise.resolve({ data: [], error: null }),
-    salesOrderIds.length > 0
-      ? supabase.schema('crm').from('sales_orders').select('id,document_number').in('id', salesOrderIds)
-      : Promise.resolve({ data: [], error: null })
-  ]);
-
-  if (supplierResult.error) {
-    // eslint-disable-next-line no-console
-    console.error('[CRM] listSupplierPurchaseOrders supplier lookup failed; continuing without supplier names.', supplierResult.error);
-  }
-  if (salesOrderResult.error) {
-    // eslint-disable-next-line no-console
-    console.error('[CRM] listSupplierPurchaseOrders sales-order lookup failed; continuing without SO document number.', salesOrderResult.error);
-  }
-
-  const supplierNameById = new Map(
-    ((supplierResult.data ?? []) as Array<{ id: string; company_name: string | null }>).map((item) => [item.id, item.company_name])
-  );
-  const salesOrderDocById = new Map(
-    ((salesOrderResult.data ?? []) as Array<{ id: string; document_number: string | null }>).map((item) => [item.id, item.document_number])
-  );
-
-  return rows.map((row) => {
-    const supplierId = String(row.supplier_id ?? '');
-    const relatedSalesOrderId = (row.related_sales_order_id as string | null) ?? null;
     const poMeta = (row.meta as { supplier_reference?: string | null; notes?: string | null } | null | undefined) ?? null;
-    const supplierId = String(row.supplier_id ?? '');
     const supplierName = supplierNameById.get(supplierId) ?? null;
     const supplierLookupWarning = supplierId && !supplierName
       ? `Supplier record not found for ID ${supplierId}.`
@@ -1637,10 +1598,6 @@ export const listSupplierPurchaseOrders = async () => {
       supplier_id: supplierId,
       supplier_name: supplierName,
       supplier_lookup_warning: supplierLookupWarning,
-      related_sales_order_id: relatedSalesOrderId,
-      related_sales_order_document_number: relatedSalesOrderId ? (salesOrderDocById.get(relatedSalesOrderId) ?? null) : null,
-      supplier_id: supplierId,
-      supplier_name: supplierNameById.get(supplierId) ?? null,
       document_number: String(row.document_number ?? ''),
       status: ((row.status as SupplierPurchaseOrderStatus | undefined) ?? 'draft'),
       issue_date: String(row.issue_date ?? ''),
