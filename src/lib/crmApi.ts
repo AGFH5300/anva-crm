@@ -926,6 +926,7 @@ export const getSalesOrderDetail = async (id: string) => {
       .select('id, quotation_id, client_id, document_number, status, issue_date, currency, subtotal, vat_amount, total, terms_and_conditions, delivery_terms, delivery_time, payment_terms, parts_origin, parts_quality, validity, customer_trn, company_trn, pic_details, additional_notes, company_letterhead_enabled, stamp_enabled, signature_enabled, client_reference_number, client_po_number, created_at, client:clients(name), quotation:quotations(document_number)')
       .eq('id', id)
       .limit(2),
+      .maybeSingle(),
     supabase
       .schema('crm')
       .from('sales_order_items')
@@ -946,6 +947,10 @@ export const getSalesOrderDetail = async (id: string) => {
   }
 
   const [order] = orderRows;
+  if (!order) {
+    throw new Error(`Sales order ${id} was not found.`);
+  }
+
   const orderRow = (order ?? {}) as SalesOrder & {
     client?: { name: string | null } | Array<{ name: string | null }> | null;
     quotation?: { document_number: string | null } | Array<{ document_number: string | null }> | null;
