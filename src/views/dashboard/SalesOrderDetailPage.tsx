@@ -39,35 +39,54 @@ const SalesOrderDetailPage = ({ id }: SalesOrderDetailPageProps) => {
   const [showCreatePo, setShowCreatePo] = useState(false);
   const [draftLines, setDraftLines] = useState<DraftPoLine[]>([]);
   const [linkedSupplierPos, setLinkedSupplierPos] = useState<SupplierPurchaseOrder[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const loadSupplierPos = () => listSupplierPurchaseOrdersBySalesOrder(id)
     .then(setLinkedSupplierPos)
     .catch((err: Error) => setError(err.message));
 
   useEffect(() => {
-    getSalesOrderDetail(id)
-      .then(({ order, lines }) => {
-        setOrder(order);
-        setLines(lines);
-        setClientPoNumber(order.client_po_number || '');
-        setDraftLines(lines.map((line) => ({
-          sourceSalesOrderItemId: line.id,
-          description: line.description,
-          quantity: Number(line.quantity),
-          supplierCost: Number(line.supplier_cost ?? line.unit_price ?? 0),
-          supplierCurrency: line.supplier_currency ?? 'AED',
-          vatRate: Number(line.vat_rate ?? 0),
-        })));
-      })
-      .catch((err: Error) => setError(err.message));
+    setLoading(true);
+    setError(null);
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug('[CRM] SalesOrderDetailPage fetch start', { id });
+    }
 
-    listVendorClients()
-      .then((suppliers) => {
-        setSupplierOptions(suppliers.map((item) => ({ id: item.id, name: item.name })));
-      })
-      .catch((err: Error) => setError(err.message));
+    Promise.allSettled([getSalesOrderDetail(id), listVendorClients(), loadSupplierPos()])
+      .then(([orderResult, suppliersResult]) => {
+        if (orderResult.status === 'fulfilled') {
+          const { order, lines } = orderResult.value;
+          setOrder(order);
+          setLines(lines);
+          setClientPoNumber(order.client_po_number || '');
+          setDraftLines(lines.map((line) => ({
+            sourceSalesOrderItemId: line.id,
+            description: line.description,
+            quantity: Number(line.quantity),
+            supplierCost: Number(line.supplier_cost ?? line.unit_price ?? 0),
+            supplierCurrency: line.supplier_currency ?? 'AED',
+            vatRate: Number(line.vat_rate ?? 0),
+          })));
+          if (process.env.NODE_ENV !== 'production') {
+            console.debug('[CRM] SalesOrderDetailPage fetch complete', { id, lineCount: lines.length });
+          }
+        } else {
+          const message = orderResult.reason instanceof Error ? orderResult.reason.message : String(orderResult.reason);
+          setError(`Failed to load sales order: ${message}`);
+          if (process.env.NODE_ENV !== 'production') {
+            console.error('[CRM] SalesOrderDetailPage order fetch error', orderResult.reason);
+          }
+        }
 
-    loadSupplierPos();
+        if (suppliersResult.status === 'fulfilled') {
+          setSupplierOptions(suppliersResult.value.map((item) => ({ id: item.id, name: item.name })));
+        } else {
+          if (process.env.NODE_ENV !== 'production') {
+            console.error('[CRM] SalesOrderDetailPage suppliers fetch error', suppliersResult.reason);
+          }
+        }
+      })
+      .finally(() => setLoading(false));
   }, [id]);
 
   const onConvert = async () => {
@@ -141,7 +160,16 @@ const SalesOrderDetailPage = ({ id }: SalesOrderDetailPageProps) => {
     }
   };
 
-  if (!order) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (loading) return <p className="text-sm text-slate-500">Loading…</p>;
+
+  if (!order) {
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-red-600">{error || 'Sales order not found.'}</p>
+        <Link className="text-sm text-primary underline" href="/dashboard/sales-orders">Back to sale orders</Link>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
