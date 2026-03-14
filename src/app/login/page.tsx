@@ -1,12 +1,12 @@
 'use client';
 
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, Suspense, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 
 const AUTH_ERROR_MESSAGE = 'Unable to sign in. Please check your email and password and try again.';
 
-const LoginPage = () => {
+const LoginPageContent = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
@@ -83,6 +83,20 @@ const LoginPage = () => {
         </button>
       </form>
     </div>
+  );
+};
+
+const LoginPage = () => {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto mt-16 w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">
+          Loading sign-in form...
+        </div>
+      }
+    >
+      <LoginPageContent />
+    </Suspense>
   );
 };
 

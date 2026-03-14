@@ -6,11 +6,11 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo } from 'react';
 import { useSupabase } from '@/hooks/useSupabase';
 
-const protectedRoutes = ['/dashboard', '/clients', '/vendors', '/logistics', '/reporting'];
+const LOGIN_ROUTE = '/login';
+const PUBLIC_ROUTES = [LOGIN_ROUTE];
 
 const isProtectedPath = (pathname: string) => {
-  if (pathname === '/dashboard' || pathname.startsWith('/dashboard/')) return true;
-  return protectedRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+  return !PUBLIC_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
 };
 
 const AppLayout = ({ children }: { children: React.ReactNode }) => {
@@ -18,22 +18,33 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
   const router = useRouter();
   const { user, loading } = useSupabase();
 
-  const onLoginPage = pathname === '/login';
+  const onLoginPage = pathname === LOGIN_ROUTE;
   const requiresAuth = useMemo(() => isProtectedPath(pathname), [pathname]);
+  const sessionExists = Boolean(user);
 
   useEffect(() => {
+    // TEMP AUTH DEBUG LOGS - remove after auth routing verification.
+    // eslint-disable-next-line no-console
+    console.log('[AUTH_DEBUG][APP_LAYOUT]', {
+      pathname,
+      sessionExists,
+      requiresAuth,
+      loginRoute: LOGIN_ROUTE,
+      loading
+    });
+
     if (loading) return;
 
     if (!user && requiresAuth) {
       const nextPath = pathname && pathname !== '/' ? pathname : '/dashboard';
-      router.replace(`/login?next=${encodeURIComponent(nextPath)}`);
+      router.replace(`${LOGIN_ROUTE}?next=${encodeURIComponent(nextPath)}`);
       return;
     }
 
     if (user && onLoginPage) {
       router.replace('/dashboard');
     }
-  }, [loading, onLoginPage, pathname, requiresAuth, router, user]);
+  }, [loading, onLoginPage, pathname, requiresAuth, router, sessionExists, user]);
 
   if (loading && requiresAuth) {
     return (
