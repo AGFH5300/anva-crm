@@ -16,12 +16,61 @@ type EditablePricingLine = Pick<QuotationLine, 'id' | 'quantity' | 'supplier_cos
   description: string;
 };
 
+
+type SupplierProfileDraft = {
+  name: string;
+  address: string;
+  email: string;
+  phone: string;
+  trn: string;
+  tags: string;
+};
+
+type SupplierQuoteRow = {
+  id: string;
+  supplier: SupplierProfileDraft;
+  unitPrice: number;
+  currency: CurrencyCode;
+  delivery: string;
+  remarks: string;
+  isPreferred: boolean;
+};
+
 const toNumber = (value: unknown, fallback = 0) => {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
 };
 
 const computeSellPrice = (landedAedCost: number, marginPct: number) => landedAedCost * (1 + marginPct / 100);
+
+
+
+const createEmptySupplierQuoteRow = (lineId: string, isPreferred = false): SupplierQuoteRow => ({
+  id: `${lineId}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+  supplier: { name: '', address: '', email: '', phone: '', trn: '', tags: '' },
+  unitPrice: 0,
+  currency: 'AED',
+  delivery: '',
+  remarks: '',
+  isPreferred
+});
+
+const createDefaultSupplierQuoteRow = (line: QuotationLine, isPreferred = true): SupplierQuoteRow => ({
+  id: `${line.id}-${Math.random().toString(36).slice(2, 8)}`,
+  supplier: {
+    name: 'Supplier',
+    address: '',
+    email: '',
+    phone: '',
+    trn: '',
+    tags: ''
+  },
+  unitPrice: toNumber(line.supplier_cost || line.unit_price),
+  currency: line.supplier_currency,
+  delivery: '',
+  remarks: '',
+  isPreferred
+});
 
 const DELIVERY_TERMS_OPTIONS = ['EXW', 'FCA', 'FOB', 'CFR', 'CIF', 'DAP', 'DDP'];
 const PAYMENT_TERMS_OPTIONS = ['Advance Payment', 'Net 15', 'Net 30', 'Net 45', 'COD'];
@@ -48,6 +97,7 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
   const [quotation, setQuotation] = useState<Quotation | null>(null);
   const [lines, setLines] = useState<QuotationLine[]>([]);
   const [editableLines, setEditableLines] = useState<EditablePricingLine[]>([]);
+  const [supplierQuoteRows, setSupplierQuoteRows] = useState<Record<string, SupplierQuoteRow[]>>({});
   const [error, setError] = useState<string | null>(null);
   const [salesOrderId, setSalesOrderId] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -93,6 +143,7 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
       discount: toNumber(line.discount),
       vat_rate: toNumber(line.vat_rate)
     })));
+    setSupplierQuoteRows(Object.fromEntries(lines.map((line) => [line.id, [createDefaultSupplierQuoteRow(line, true)]])));
     setCommercialTerms({
       termsAndConditions: quotation.terms_and_conditions ?? '',
       deliveryTerms: quotation.delivery_terms ?? '',
@@ -177,6 +228,66 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
       }
       return next;
     }));
+  };
+
+
+  const syncPreferredSupplierQuoteToPricing = (lineId: string, rows: SupplierQuoteRow[]) => {
+    const preferred = rows.find((row) => row.isPreferred) ?? rows[0];
+    if (!preferred) return;
+
+    setEditableLines((previous) => previous.map((line) => {
+      if (line.id !== lineId) return line;
+      const landedAedCost = Number((preferred.unitPrice * line.exchange_rate).toFixed(2));
+      const unitPrice = Number(computeSellPrice(landedAedCost, line.margin_pct).toFixed(2));
+      const discount = Number((line.quantity * unitPrice * (line.discount_pct / 100)).toFixed(2));
+      return {
+        ...line,
+        supplier_cost: preferred.unitPrice,
+        supplier_currency: preferred.currency,
+        landed_aed_cost: landedAedCost,
+        unit_price: unitPrice,
+        discount
+      };
+    }));
+  };
+
+  const addSupplierQuoteRow = (lineId: string) => {
+    setSupplierQuoteRows((previous) => {
+      const current = previous[lineId] ?? [];
+      const next = [...current, createEmptySupplierQuoteRow(lineId, current.length === 0)];
+      syncPreferredSupplierQuoteToPricing(lineId, next);
+      return { ...previous, [lineId]: next };
+    });
+  };
+
+  const removeSupplierQuoteRow = (lineId: string, rowId: string) => {
+    setSupplierQuoteRows((previous) => {
+      const current = previous[lineId] ?? [];
+      const trimmed = current.filter((row) => row.id !== rowId);
+      const next = trimmed.length > 0
+        ? trimmed.map((row, index) => ({ ...row, isPreferred: row.isPreferred || index === 0 }))
+        : [createEmptySupplierQuoteRow(lineId, true)];
+      syncPreferredSupplierQuoteToPricing(lineId, next);
+      return { ...previous, [lineId]: next };
+    });
+  };
+
+  const updateSupplierQuoteRow = (lineId: string, rowId: string, updater: (row: SupplierQuoteRow) => SupplierQuoteRow) => {
+    setSupplierQuoteRows((previous) => {
+      const current = previous[lineId] ?? [];
+      const next = current.map((row) => (row.id === rowId ? updater(row) : row));
+      syncPreferredSupplierQuoteToPricing(lineId, next);
+      return { ...previous, [lineId]: next };
+    });
+  };
+
+  const setPreferredSupplierQuote = (lineId: string, rowId: string) => {
+    setSupplierQuoteRows((previous) => {
+      const current = previous[lineId] ?? [];
+      const next = current.map((row) => ({ ...row, isPreferred: row.id === rowId }));
+      syncPreferredSupplierQuoteToPricing(lineId, next);
+      return { ...previous, [lineId]: next };
+    });
   };
 
   const onBulkApply = () => {
@@ -433,57 +544,69 @@ const QuotationDetailPage = ({ id }: QuotationDetailPageProps) => {
         {lines.map((line) => {
           const editableLine = editableLines.find((item) => item.id === line.id);
           if (!editableLine) return null;
-          const taxable = Math.max(0, editableLine.quantity * editableLine.unit_price - editableLine.discount);
+          const quoteRows = supplierQuoteRows[line.id] ?? [createDefaultSupplierQuoteRow(line, true)];
+          const preferredQuote = quoteRows.find((row) => row.isPreferred) ?? quoteRows[0] ?? null;
+          const unitPrice = preferredQuote?.unitPrice ?? editableLine.unit_price;
+          const taxable = Math.max(0, editableLine.quantity * unitPrice - editableLine.discount);
           const lineTotal = taxable + taxable * editableLine.vat_rate / 100;
 
           return (
-            <div key={line.id} className="space-y-2 border-b py-3 text-sm last:border-b-0">
-              <p className="font-medium text-slate-900">{line.description}</p>
-              <div className="grid gap-2 md:grid-cols-6">
-                <label className="space-y-1 text-xs font-medium text-slate-600">
-                  <span>Quantity</span>
-                  <input type="number" step="0.001" className="w-full rounded border p-2 text-sm" value={editableLine.quantity} onChange={(event) => onChangePricing(line.id, 'quantity', event.target.value)} />
-                </label>
-                <label className="space-y-1 text-xs font-medium text-slate-600">
-                  <span>Supplier cost</span>
-                  <input type="number" step="0.01" className="w-full rounded border p-2 text-sm" value={editableLine.supplier_cost} onChange={(event) => onChangePricing(line.id, 'supplier_cost', event.target.value)} />
-                </label>
-                <label className="space-y-1 text-xs font-medium text-slate-600">
-                  <span>Supplier currency</span>
-                  <select className="w-full rounded border p-2 text-sm" value={editableLine.supplier_currency} onChange={(event) => onChangePricing(line.id, 'supplier_currency', event.target.value)}>
-                    <option value="AED">AED</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="GBP">GBP</option>
-                  </select>
-                </label>
-                <label className="space-y-1 text-xs font-medium text-slate-600">
-                  <span>Exchange rate (FX)</span>
-                  <input type="number" step="0.0001" className="w-full rounded border p-2 text-sm" value={editableLine.exchange_rate} onChange={(event) => onChangePricing(line.id, 'exchange_rate', event.target.value)} />
-                </label>
-                <label className="space-y-1 text-xs font-medium text-slate-600">
-                  <span>Landed AED cost</span>
-                  <input type="number" step="0.01" className="w-full rounded border p-2 text-sm" value={editableLine.landed_aed_cost} onChange={(event) => onChangePricing(line.id, 'landed_aed_cost', event.target.value)} />
-                </label>
-                <label className="space-y-1 text-xs font-medium text-slate-600">
-                  <span>Margin %</span>
-                  <input type="number" step="0.01" className="w-full rounded border p-2 text-sm" value={editableLine.margin_pct} onChange={(event) => onChangePricing(line.id, 'margin_pct', event.target.value)} />
-                </label>
-                <label className="space-y-1 text-xs font-medium text-slate-600">
-                  <span>Sell price</span>
-                  <input type="number" step="0.01" className="w-full rounded border p-2 text-sm" value={editableLine.unit_price} onChange={(event) => onChangePricing(line.id, 'unit_price', event.target.value)} />
-                </label>
-                <label className="space-y-1 text-xs font-medium text-slate-600">
-                  <span>Discount %</span>
-                  <input type="number" step="0.01" className="w-full rounded border p-2 text-sm" value={editableLine.discount_pct} onChange={(event) => onChangePricing(line.id, 'discount_pct', event.target.value)} />
-                </label>
-                <label className="space-y-1 text-xs font-medium text-slate-600">
-                  <span>Discount amount</span>
-                  <input type="number" step="0.01" className="w-full rounded border p-2 text-sm" value={editableLine.discount} onChange={(event) => onChangePricing(line.id, 'discount', event.target.value)} />
-                </label>
-                <label className="space-y-1 text-xs font-medium text-slate-600">
-                  <span>VAT %</span>
-                  <input type="number" step="0.01" className="w-full rounded border p-2 text-sm" value={editableLine.vat_rate} onChange={(event) => onChangePricing(line.id, 'vat_rate', event.target.value)} />
-                </label>
-                <p className="rounded border border-slate-200 bg-slate-50 p-2">Line total: {lineTotal.toFixed(2)}</p>
-                <button type="button" onClick={() => onDeleteLine(line.id)} className="rounded border border-red-200 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50">Delete</button>
+            <div key={line.id} className="space-y-3 border-b py-4 text-sm last:border-b-0">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="font-medium text-slate-900">{line.description}</p>
+                <button type="button" onClick={() => addSupplierQuoteRow(line.id)} className="rounded border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50">+ Add supplier quote row</button>
+              </div>
+              <div className="overflow-x-auto rounded-lg border border-slate-200">
+                <table className="min-w-[1240px] w-full text-left text-xs">
+                  <thead className="sticky top-0 z-10 bg-slate-50 text-slate-600">
+                    <tr>
+                      <th className="px-2 py-2">Supplier</th>
+                      <th className="px-2 py-2">Address</th>
+                      <th className="px-2 py-2">Email</th>
+                      <th className="px-2 py-2">Phone</th>
+                      <th className="px-2 py-2">TRN</th>
+                      <th className="px-2 py-2">Products / Tags</th>
+                      <th className="px-2 py-2">Unit Price</th>
+                      <th className="px-2 py-2">Total</th>
+                      <th className="px-2 py-2">Currency</th>
+                      <th className="px-2 py-2">Delivery</th>
+                      <th className="px-2 py-2">Remarks</th>
+                      <th className="px-2 py-2">Preferred</th>
+                      <th className="px-2 py-2">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {quoteRows.map((quoteRow) => {
+                      const quoteTotal = Number((quoteRow.unitPrice * editableLine.quantity).toFixed(2));
+                      return (
+                        <tr key={quoteRow.id} className="border-t align-top">
+                          <td className="px-2 py-2 min-w-[170px]"><input className="w-full rounded border p-1" placeholder="Supplier name" value={quoteRow.supplier.name} onChange={(event) => updateSupplierQuoteRow(line.id, quoteRow.id, (row) => ({ ...row, supplier: { ...row.supplier, name: event.target.value } }))} /></td>
+                          <td className="px-2 py-2 min-w-[180px]"><textarea rows={2} className="w-full rounded border p-1" value={quoteRow.supplier.address} onChange={(event) => updateSupplierQuoteRow(line.id, quoteRow.id, (row) => ({ ...row, supplier: { ...row.supplier, address: event.target.value } }))} /></td>
+                          <td className="px-2 py-2 min-w-[150px]"><input className="w-full rounded border p-1" value={quoteRow.supplier.email} onChange={(event) => updateSupplierQuoteRow(line.id, quoteRow.id, (row) => ({ ...row, supplier: { ...row.supplier, email: event.target.value } }))} /></td>
+                          <td className="px-2 py-2 min-w-[130px]"><input className="w-full rounded border p-1" value={quoteRow.supplier.phone} onChange={(event) => updateSupplierQuoteRow(line.id, quoteRow.id, (row) => ({ ...row, supplier: { ...row.supplier, phone: event.target.value } }))} /></td>
+                          <td className="px-2 py-2 min-w-[120px]"><input className="w-full rounded border p-1" value={quoteRow.supplier.trn} onChange={(event) => updateSupplierQuoteRow(line.id, quoteRow.id, (row) => ({ ...row, supplier: { ...row.supplier, trn: event.target.value } }))} /></td>
+                          <td className="px-2 py-2 min-w-[160px]"><input className="w-full rounded border p-1" placeholder="Pumps, valves..." value={quoteRow.supplier.tags} onChange={(event) => updateSupplierQuoteRow(line.id, quoteRow.id, (row) => ({ ...row, supplier: { ...row.supplier, tags: event.target.value } }))} /></td>
+                          <td className="px-2 py-2"><input type="number" step="0.01" min="0" className="w-24 rounded border p-1" value={quoteRow.unitPrice} onChange={(event) => updateSupplierQuoteRow(line.id, quoteRow.id, (row) => ({ ...row, unitPrice: toNumber(event.target.value) }))} /></td>
+                          <td className="px-2 py-2 font-medium text-slate-700">{quoteTotal.toFixed(2)}</td>
+                          <td className="px-2 py-2"><select className="rounded border p-1" value={quoteRow.currency} onChange={(event) => updateSupplierQuoteRow(line.id, quoteRow.id, (row) => ({ ...row, currency: event.target.value as CurrencyCode }))}><option value="AED">AED</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="GBP">GBP</option></select></td>
+                          <td className="px-2 py-2 min-w-[120px]"><input className="w-full rounded border p-1" value={quoteRow.delivery} onChange={(event) => updateSupplierQuoteRow(line.id, quoteRow.id, (row) => ({ ...row, delivery: event.target.value }))} /></td>
+                          <td className="px-2 py-2 min-w-[160px]"><textarea rows={2} className="w-full rounded border p-1" value={quoteRow.remarks} onChange={(event) => updateSupplierQuoteRow(line.id, quoteRow.id, (row) => ({ ...row, remarks: event.target.value }))} /></td>
+                          <td className="px-2 py-2 text-center"><input type="radio" name={`preferred-${line.id}`} checked={quoteRow.isPreferred} onChange={() => setPreferredSupplierQuote(line.id, quoteRow.id)} /></td>
+                          <td className="px-2 py-2"><button type="button" onClick={() => removeSupplierQuoteRow(line.id, quoteRow.id)} className="rounded border border-red-200 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50">Remove</button></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="grid gap-2 md:grid-cols-4">
+                <p className="rounded border border-slate-200 bg-slate-50 p-2 text-xs">Quantity: {editableLine.quantity}</p>
+                <p className="rounded border border-slate-200 bg-slate-50 p-2 text-xs">Preferred supplier: {preferredQuote?.supplier.name || '—'}</p>
+                <p className="rounded border border-slate-200 bg-slate-50 p-2 text-xs">Selected unit price: {preferredQuote?.currency || editableLine.supplier_currency} {unitPrice.toFixed(2)}</p>
+                <p className="rounded border border-slate-200 bg-slate-50 p-2 text-xs font-semibold">Line total: {lineTotal.toFixed(2)}</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => onDeleteLine(line.id)} className="rounded border border-red-200 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50">Delete line</button>
               </div>
             </div>
           );
