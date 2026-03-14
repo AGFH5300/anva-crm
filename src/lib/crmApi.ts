@@ -1559,24 +1559,47 @@ export const listSupplierPurchaseOrders = async () => {
   const { data, error } = await supabase
     .schema('crm')
     .from('purchase_orders')
-    .select('id,related_sales_order_id,supplier_id,document_number,status,issue_date,expected_delivery,currency,payment_terms,meta,subtotal,vat_amount,total,created_at,supplier_info:suppliers!purchase_orders_supplier_id_fkey(company_name),sales_order:sales_orders!purchase_orders_related_sales_order_id_fkey(document_number)')
+    .select('id,related_sales_order_id,supplier_id,document_number,status,issue_date,expected_delivery,currency,payment_terms,meta,subtotal,vat_amount,total,created_at,sales_order:sales_orders!purchase_orders_related_sales_order_id_fkey(document_number)')
     .order('created_at', { ascending: false });
 
   throwIfError(error);
-  return ((data ?? []) as Array<Record<string, unknown>>).map((row) => {
+
+  const rows = (data ?? []) as Array<Record<string, unknown>>;
+  const supplierIds = Array.from(new Set(rows
+    .map((row) => String(row.supplier_id ?? '').trim())
+    .filter((supplierId) => supplierId.length > 0)));
+
+  const supplierNameById = new Map<string, string>();
+  if (supplierIds.length) {
+    const { data: suppliers, error: supplierLookupError } = await supabase
+      .schema('crm')
+      .from(SUPPLIER_TABLE)
+      .select('id,company_name')
+      .in('id', supplierIds);
+    throwIfError(supplierLookupError);
+
+    ((suppliers ?? []) as Array<{ id: string; company_name: string | null }>).forEach((supplier) => {
+      supplierNameById.set(String(supplier.id), supplier.company_name ?? '');
+    });
+  }
+
+  return rows.map((row) => {
     const salesOrder = row.sales_order as { document_number: string | null } | Array<{ document_number: string | null }> | null | undefined;
     const salesOrderDocument = Array.isArray(salesOrder) ? (salesOrder[0]?.document_number ?? null) : (salesOrder?.document_number ?? null);
     const poMeta = (row.meta as { supplier_reference?: string | null; notes?: string | null } | null | undefined) ?? null;
+    const supplierId = String(row.supplier_id ?? '');
+    const supplierName = supplierNameById.get(supplierId) ?? null;
+    const supplierLookupWarning = supplierId && !supplierName
+      ? `Supplier record not found for ID ${supplierId}.`
+      : null;
 
     return {
       id: String(row.id ?? ''),
       related_sales_order_id: (row.related_sales_order_id as string | null) ?? null,
       related_sales_order_document_number: salesOrderDocument,
-      supplier_id: String(row.supplier_id ?? ''),
-      supplier_name: (() => {
-        const supplierInfo = row.supplier_info as { company_name: string | null } | Array<{ company_name: string | null }> | null | undefined;
-        return Array.isArray(supplierInfo) ? (supplierInfo[0]?.company_name ?? null) : (supplierInfo?.company_name ?? null);
-      })(),
+      supplier_id: supplierId,
+      supplier_name: supplierName,
+      supplier_lookup_warning: supplierLookupWarning,
       document_number: String(row.document_number ?? ''),
       status: ((row.status as SupplierPurchaseOrderStatus | undefined) ?? 'draft'),
       issue_date: String(row.issue_date ?? ''),
@@ -1598,7 +1621,7 @@ export const getSupplierPurchaseOrderDetail = async (id: string) => {
     supabase
       .schema('crm')
       .from('purchase_orders')
-      .select('id,related_sales_order_id,supplier_id,document_number,status,issue_date,expected_delivery,currency,payment_terms,meta,subtotal,vat_amount,total,created_at,supplier_info:suppliers!purchase_orders_supplier_id_fkey(company_name),sales_order:sales_orders!purchase_orders_related_sales_order_id_fkey(document_number)')
+      .select('id,related_sales_order_id,supplier_id,document_number,status,issue_date,expected_delivery,currency,payment_terms,meta,subtotal,vat_amount,total,created_at,sales_order:sales_orders!purchase_orders_related_sales_order_id_fkey(document_number)')
       .eq('id', id)
       .single(),
     supabase
@@ -1613,8 +1636,23 @@ export const getSupplierPurchaseOrderDetail = async (id: string) => {
   throwIfError(linesError);
   if (!po) throw new Error('Supplier purchase order not found.');
 
-  const supplierInfo = (po as Record<string, unknown>).supplier_info as { company_name: string | null } | Array<{ company_name: string | null }> | null | undefined;
-  const supplierName = Array.isArray(supplierInfo) ? (supplierInfo[0]?.company_name ?? null) : (supplierInfo?.company_name ?? null);
+  const supplierId = String(po.supplier_id ?? '');
+  let supplierName: string | null = null;
+  let supplierLookupWarning: string | null = null;
+  if (supplierId) {
+    const { data: supplier, error: supplierLookupError } = await supabase
+      .schema('crm')
+      .from(SUPPLIER_TABLE)
+      .select('company_name')
+      .eq('id', supplierId)
+      .maybeSingle();
+    throwIfError(supplierLookupError);
+    supplierName = supplier?.company_name ?? null;
+    if (!supplierName) {
+      supplierLookupWarning = `Supplier record not found for ID ${supplierId}.`;
+    }
+  }
+
   const salesOrder = (po as Record<string, unknown>).sales_order as { document_number: string | null } | Array<{ document_number: string | null }> | null | undefined;
   const relatedSalesOrderDocument = Array.isArray(salesOrder) ? (salesOrder[0]?.document_number ?? null) : (salesOrder?.document_number ?? null);
   const poMeta = (po.meta as { supplier_reference?: string | null; notes?: string | null } | null | undefined) ?? null;
@@ -1626,6 +1664,7 @@ export const getSupplierPurchaseOrderDetail = async (id: string) => {
       related_sales_order_document_number: relatedSalesOrderDocument,
       supplier_id: String(po.supplier_id ?? ''),
       supplier_name: supplierName,
+      supplier_lookup_warning: supplierLookupWarning,
       document_number: String(po.document_number ?? ''),
       status: ((po.status as SupplierPurchaseOrderStatus | undefined) ?? 'draft'),
       issue_date: String(po.issue_date ?? ''),
