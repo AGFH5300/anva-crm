@@ -3,13 +3,13 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useSupabase } from '@/hooks/useSupabase';
+import { useAuthSession } from '@/components/auth/AuthSessionProvider';
 import { supabase } from '@/lib/supabaseClient';
 
 const Topbar = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [loggingOut, setLoggingOut] = useState(false);
-  const { user } = useSupabase();
+  const { user } = useAuthSession();
   const router = useRouter();
   const pathname = usePathname();
   const loginHref = pathname ? `/login?next=${encodeURIComponent(pathname)}` : '/login';
