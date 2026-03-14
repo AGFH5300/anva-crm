@@ -34,6 +34,40 @@ const throwIfError = (error: PostgrestError | null) => {
   }
 };
 
+const SUPPLIER_TABLE = 'suppliers';
+
+class UnauthenticatedSessionError extends Error {
+  constructor(message = 'You must be signed in to add suppliers.') {
+    super(message);
+    this.name = 'UnauthenticatedSessionError';
+  }
+}
+
+export const assertAuthenticatedSession = async () => {
+  const { data, error } = await supabase.auth.getSession();
+  if (error) {
+    throw new Error(`Unable to validate your sign-in session: ${error.message}`);
+  }
+
+  const userId = data.session?.user?.id ?? null;
+  const hasSession = Boolean(data.session);
+  if (!hasSession || !userId) {
+    throw new UnauthenticatedSessionError();
+  }
+
+  return { session: data.session, userId, hasSession };
+};
+
+const logSupplierOperationError = (payload: {
+  action: 'fetch' | 'create' | 'check-duplicate';
+  requestedTable: string;
+  session: { userId: string | null; hasSession: boolean };
+  error: unknown;
+}) => {
+  // eslint-disable-next-line no-console
+  console.error('[CRM] Supplier operation failed', payload);
+};
+
 
 const getRelationName = (value: { name: string | null } | Array<{ name: string | null }> | null | undefined) => {
   if (!value) return null;
@@ -1016,9 +1050,12 @@ const MOCK_SUPPLIERS: Supplier[] = [
   }
 ];
 
-const isMissingSuppliersTableError = (message: string) =>
-  message.includes("crm.suppliers") ||
-  message.toLowerCase().includes("relation \"crm.suppliers\" does not exist");
+const isMissingSuppliersTableError = (message: string) => {
+  const normalized = message.toLowerCase();
+  return normalized.includes("crm.suppliers")
+    || normalized.includes("relation \"crm.suppliers\" does not exist")
+    || normalized.includes("could not find the table 'crm.suppliers' in the schema cache");
+};
 
 const filterMockSuppliers = (search: string) => {
   const query = search.trim().toLowerCase();
@@ -1031,9 +1068,23 @@ const filterMockSuppliers = (search: string) => {
 };
 
 export const listSuppliers = async (search = '') => {
+  const sessionResult = await supabase.auth.getSession();
+  const sessionInfo = {
+    userId: sessionResult.data.session?.user?.id ?? null,
+    hasSession: Boolean(sessionResult.data.session)
+  };
+
+  if (sessionResult.error) {
+    logSupplierOperationError({
+      action: 'fetch',
+      requestedTable: SUPPLIER_TABLE,
+      session: sessionInfo,
+      error: sessionResult.error
+    });
+  }
+
   let query = supabase
-    .schema('crm')
-    .from('suppliers')
+    .from(SUPPLIER_TABLE)
     .select('id,supplier_code,company_name,contact_person,email,phone,mobile,website,address_line_1,address_line_2,city,state,country,postal_code,tax_registration_no,payment_terms,currency,vendor_type,notes,created_at,updated_at')
     .order('company_name', { ascending: true })
     .limit(100);
@@ -1044,6 +1095,12 @@ export const listSuppliers = async (search = '') => {
 
   const { data, error } = await query;
   if (error) {
+    logSupplierOperationError({
+      action: 'fetch',
+      requestedTable: SUPPLIER_TABLE,
+      session: sessionInfo,
+      error
+    });
     if (isMissingSuppliersTableError(error.message)) {
       return filterMockSuppliers(search);
     }
@@ -1054,16 +1111,36 @@ export const listSuppliers = async (search = '') => {
 };
 
 export const checkSupplierDuplicates = async (companyName: string, email?: string) => {
+  const sessionResult = await supabase.auth.getSession();
+  const sessionInfo = {
+    userId: sessionResult.data.session?.user?.id ?? null,
+    hasSession: Boolean(sessionResult.data.session)
+  };
+
+  if (sessionResult.error) {
+    logSupplierOperationError({
+      action: 'check-duplicate',
+      requestedTable: SUPPLIER_TABLE,
+      session: sessionInfo,
+      error: sessionResult.error
+    });
+  }
+
   const clauses = [`company_name.ilike.${companyName.trim()}`];
   if (email?.trim()) clauses.push(`email.ilike.${email.trim()}`);
   const { data, error } = await supabase
-    .schema('crm')
-    .from('suppliers')
+    .from(SUPPLIER_TABLE)
     .select('id,company_name,email')
     .or(clauses.join(','))
     .limit(5);
 
   if (error) {
+    logSupplierOperationError({
+      action: 'check-duplicate',
+      requestedTable: SUPPLIER_TABLE,
+      session: sessionInfo,
+      error
+    });
     if (isMissingSuppliersTableError(error.message)) {
       const mockMatches = filterMockSuppliers(companyName).filter((supplier) =>
         supplier.company_name.toLowerCase() === companyName.trim().toLowerCase() ||
@@ -1079,9 +1156,10 @@ export const checkSupplierDuplicates = async (companyName: string, email?: strin
 };
 
 export const createSupplier = async (payload: SupplierInput) => {
+  const sessionInfo = await assertAuthenticatedSession();
+
   const { data, error } = await supabase
-    .schema('crm')
-    .from('suppliers')
+    .from(SUPPLIER_TABLE)
     .insert({
       company_name: payload.companyName.trim(),
       contact_person: payload.contactPerson?.trim() || null,
@@ -1095,6 +1173,15 @@ export const createSupplier = async (payload: SupplierInput) => {
     })
     .select('id,supplier_code,company_name,contact_person,email,phone,mobile,website,address_line_1,address_line_2,city,state,country,postal_code,tax_registration_no,payment_terms,currency,vendor_type,notes,created_at,updated_at')
     .single();
+
+  if (error) {
+    logSupplierOperationError({
+      action: 'create',
+      requestedTable: SUPPLIER_TABLE,
+      session: { userId: sessionInfo.userId, hasSession: sessionInfo.hasSession },
+      error
+    });
+  }
 
   throwIfError(error);
   return data as Supplier;
@@ -1310,16 +1397,14 @@ export const listAllSalesOrders = async () => {
 };
 
 export const listVendorClients = async () => {
-  const { data, error } = await supabase
-    .schema('crm')
-    .from('clients')
-    .select('id,name,contact_email,contact_phone,payment_terms')
-    .in('type', ['vendor', 'both'])
-    .eq('status', 'active')
-    .order('name', { ascending: true });
-
-  throwIfError(error);
-  return (data ?? []) as Array<{ id: string; name: string; contact_email: string | null; contact_phone: string | null; payment_terms: string | null }>;
+  const suppliers = await listSuppliers();
+  return suppliers.map((supplier) => ({
+    id: supplier.id,
+    name: supplier.company_name,
+    contact_email: supplier.email,
+    contact_phone: supplier.phone ?? supplier.mobile ?? null,
+    payment_terms: supplier.payment_terms ?? null
+  }));
 };
 
 export const createSupplierPurchaseOrderFromSalesOrder = async (payload: {
@@ -1340,7 +1425,7 @@ export const createSupplierPurchaseOrderFromSalesOrder = async (payload: {
   const [{ data: salesOrder, error: orderError }, { data: items, error: itemError }, { data: supplier, error: supplierError }] = await Promise.all([
     supabase.schema('crm').from('sales_orders').select('id,quotation_id,client_id,currency,payment_terms,issuer,recipient,tax_summary,subtotal,vat_amount,total').eq('id', payload.salesOrderId).single(),
     supabase.schema('crm').from('sales_order_items').select('id,description,quantity,supplier_cost,supplier_currency,exchange_rate,landed_aed_cost,margin_pct,unit_price,currency,discount_pct,vat_rate,is_zero_rated,is_exempt,line_total,sort_order').eq('sales_order_id', payload.salesOrderId).order('sort_order', { ascending: true }),
-    supabase.schema('crm').from('clients').select('id,name,contact_email,contact_phone').eq('id', payload.supplierId).single()
+    supabase.from(SUPPLIER_TABLE).select('id,company_name,email,phone,mobile').eq('id', payload.supplierId).single()
   ]);
 
   throwIfError(orderError);
@@ -1374,9 +1459,9 @@ export const createSupplierPurchaseOrderFromSalesOrder = async (payload: {
       issuer: (salesOrder as { issuer: Record<string, unknown> }).issuer,
       supplier: {
         id: supplier.id,
-        name: supplier.name,
-        email: supplier.contact_email,
-        phone: supplier.contact_phone,
+        name: supplier.company_name,
+        email: supplier.email,
+        phone: supplier.phone ?? supplier.mobile ?? null,
       },
       meta,
       tax_summary: (salesOrder as { tax_summary: Record<string, unknown> }).tax_summary,
@@ -1459,7 +1544,7 @@ export const listSupplierPurchaseOrders = async () => {
   const { data, error } = await supabase
     .schema('crm')
     .from('purchase_orders')
-    .select('id,related_sales_order_id,supplier_id,document_number,status,issue_date,expected_delivery,currency,payment_terms,meta,subtotal,vat_amount,total,created_at,supplier_client:clients!purchase_orders_supplier_id_fkey(name),sales_order:sales_orders!purchase_orders_related_sales_order_id_fkey(document_number)')
+    .select('id,related_sales_order_id,supplier_id,document_number,status,issue_date,expected_delivery,currency,payment_terms,meta,subtotal,vat_amount,total,created_at,supplier_info:suppliers!purchase_orders_supplier_id_fkey(company_name),sales_order:sales_orders!purchase_orders_related_sales_order_id_fkey(document_number)')
     .order('created_at', { ascending: false });
 
   throwIfError(error);
@@ -1473,7 +1558,10 @@ export const listSupplierPurchaseOrders = async () => {
       related_sales_order_id: (row.related_sales_order_id as string | null) ?? null,
       related_sales_order_document_number: salesOrderDocument,
       supplier_id: String(row.supplier_id ?? ''),
-      supplier_name: getRelationName((row.supplier_client as { name: string | null } | Array<{ name: string | null }> | null | undefined) ?? null),
+      supplier_name: (() => {
+        const supplierInfo = row.supplier_info as { company_name: string | null } | Array<{ company_name: string | null }> | null | undefined;
+        return Array.isArray(supplierInfo) ? (supplierInfo[0]?.company_name ?? null) : (supplierInfo?.company_name ?? null);
+      })(),
       document_number: String(row.document_number ?? ''),
       status: ((row.status as SupplierPurchaseOrderStatus | undefined) ?? 'draft'),
       issue_date: String(row.issue_date ?? ''),
@@ -1495,7 +1583,7 @@ export const getSupplierPurchaseOrderDetail = async (id: string) => {
     supabase
       .schema('crm')
       .from('purchase_orders')
-      .select('id,related_sales_order_id,supplier_id,document_number,status,issue_date,expected_delivery,currency,payment_terms,meta,subtotal,vat_amount,total,created_at,supplier_client:clients!purchase_orders_supplier_id_fkey(name),sales_order:sales_orders!purchase_orders_related_sales_order_id_fkey(document_number)')
+      .select('id,related_sales_order_id,supplier_id,document_number,status,issue_date,expected_delivery,currency,payment_terms,meta,subtotal,vat_amount,total,created_at,supplier_info:suppliers!purchase_orders_supplier_id_fkey(company_name),sales_order:sales_orders!purchase_orders_related_sales_order_id_fkey(document_number)')
       .eq('id', id)
       .single(),
     supabase
@@ -1510,7 +1598,8 @@ export const getSupplierPurchaseOrderDetail = async (id: string) => {
   throwIfError(linesError);
   if (!po) throw new Error('Supplier purchase order not found.');
 
-  const supplierName = getRelationName((po as Record<string, unknown>).supplier_client as { name: string | null } | Array<{ name: string | null }> | null | undefined);
+  const supplierInfo = (po as Record<string, unknown>).supplier_info as { company_name: string | null } | Array<{ company_name: string | null }> | null | undefined;
+  const supplierName = Array.isArray(supplierInfo) ? (supplierInfo[0]?.company_name ?? null) : (supplierInfo?.company_name ?? null);
   const salesOrder = (po as Record<string, unknown>).sales_order as { document_number: string | null } | Array<{ document_number: string | null }> | null | undefined;
   const relatedSalesOrderDocument = Array.isArray(salesOrder) ? (salesOrder[0]?.document_number ?? null) : (salesOrder?.document_number ?? null);
   const poMeta = (po.meta as { supplier_reference?: string | null; notes?: string | null } | null | undefined) ?? null;

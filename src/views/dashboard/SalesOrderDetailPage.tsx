@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   convertSalesOrderToInvoice,
-  createClient,
+  createSupplier,
   createSupplierPurchaseOrderFromSalesOrder,
   getSalesOrderDetail,
   listSupplierPurchaseOrdersBySalesOrder,
@@ -40,20 +40,20 @@ const SalesOrderDetailPage = ({ id }: SalesOrderDetailPageProps) => {
   const [draftLines, setDraftLines] = useState<DraftPoLine[]>([]);
   const [linkedSupplierPos, setLinkedSupplierPos] = useState<SupplierPurchaseOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [supplierWarning, setSupplierWarning] = useState<string | null>(null);
 
-  const loadSupplierPos = () => listSupplierPurchaseOrdersBySalesOrder(id)
-    .then(setLinkedSupplierPos)
-    .catch((err: Error) => setError(err.message));
+  const loadSupplierPos = () => listSupplierPurchaseOrdersBySalesOrder(id);
 
   useEffect(() => {
     setLoading(true);
     setError(null);
+    setSupplierWarning(null);
     if (process.env.NODE_ENV !== 'production') {
       console.debug('[CRM] SalesOrderDetailPage fetch start', { id });
     }
 
     Promise.allSettled([getSalesOrderDetail(id), listVendorClients(), loadSupplierPos()])
-      .then(([orderResult, suppliersResult]) => {
+      .then(([orderResult, suppliersResult, supplierPoResult]) => {
         if (orderResult.status === 'fulfilled') {
           const { order, lines } = orderResult.value;
           setOrder(order);
@@ -81,8 +81,20 @@ const SalesOrderDetailPage = ({ id }: SalesOrderDetailPageProps) => {
         if (suppliersResult.status === 'fulfilled') {
           setSupplierOptions(suppliersResult.value.map((item) => ({ id: item.id, name: item.name })));
         } else {
+          const message = suppliersResult.reason instanceof Error ? suppliersResult.reason.message : String(suppliersResult.reason);
+          setSupplierWarning(`Supplier list could not be loaded: ${message}`);
           if (process.env.NODE_ENV !== 'production') {
             console.error('[CRM] SalesOrderDetailPage suppliers fetch error', suppliersResult.reason);
+          }
+        }
+
+        if (supplierPoResult.status === 'fulfilled') {
+          setLinkedSupplierPos(supplierPoResult.value);
+        } else {
+          const message = supplierPoResult.reason instanceof Error ? supplierPoResult.reason.message : String(supplierPoResult.reason);
+          setSupplierWarning((current) => current ?? `Linked supplier POs could not be loaded: ${message}`);
+          if (process.env.NODE_ENV !== 'production') {
+            console.error('[CRM] SalesOrderDetailPage supplier PO fetch error', supplierPoResult.reason);
           }
         }
       })
@@ -112,12 +124,13 @@ const SalesOrderDetailPage = ({ id }: SalesOrderDetailPageProps) => {
   const onAddSupplier = async () => {
     if (!newSupplierName.trim()) return;
     try {
-      const created = await createClient({ name: newSupplierName, type: 'vendor' });
-      setSupplierOptions((prev) => [...prev, { id: created.id, name: created.name }].sort((a, b) => a.name.localeCompare(b.name)));
+      const created = await createSupplier({ companyName: newSupplierName });
+      setSupplierOptions((prev) => [...prev, { id: created.id, name: created.company_name }].sort((a, b) => a.name.localeCompare(b.name)));
       setSupplierId(created.id);
       setNewSupplierName('');
     } catch (err) {
-      setError((err as Error).message);
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message.toLowerCase().includes('signed in to add suppliers') ? 'You must be signed in to add suppliers' : message);
     }
   };
 
@@ -154,7 +167,8 @@ const SalesOrderDetailPage = ({ id }: SalesOrderDetailPageProps) => {
       });
       setCreatedPoId(poId);
       setShowCreatePo(false);
-      await loadSupplierPos();
+      const supplierPos = await loadSupplierPos();
+      setLinkedSupplierPos(supplierPos);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -179,6 +193,7 @@ const SalesOrderDetailPage = ({ id }: SalesOrderDetailPageProps) => {
       </div>
       {invoiceId ? <p className="text-sm text-emerald-700">Invoice created: {invoiceId}</p> : null}
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {supplierWarning ? <p className="text-sm text-amber-700">{supplierWarning}</p> : null}
       <Link className="text-sm text-primary underline" href="/dashboard/sales-orders">Back to sale orders</Link>
       <p className="text-sm text-slate-600">Quotation reference: <span className="font-medium">{order.quotation_document_number || '-'}</span></p>
       <p className="text-sm text-slate-600">Client reference number: <span className="font-medium">{order.client_reference_number || '-'}</span></p>
