@@ -168,6 +168,8 @@ export const createClient = async (payload: {
   email?: string;
   phone?: string;
 }) => {
+  await assertAuthenticatedSession();
+
   const { data, error } = await supabase
     .schema('crm')
     .from('clients')
