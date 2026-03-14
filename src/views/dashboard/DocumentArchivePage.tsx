@@ -28,20 +28,46 @@ const DocumentArchivePage = () => {
   }, [params]);
 
   useEffect(() => {
-    Promise.all([listAllEnquiries(), listAllQuotations(), listAllSalesOrders(), listAllInvoices()])
-      .then(([allEnquiries, allQuotations, allOrders, allInvoices]) => {
-        setEnquiries(allEnquiries);
-        setQuotations(allQuotations);
-        setOrders(allOrders);
-        setInvoices(allInvoices);
+    setLoading(true);
+    setError(null);
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug('[CRM] DocumentArchivePage fetch start');
+    }
+
+    Promise.allSettled([listAllEnquiries(), listAllQuotations(), listAllSalesOrders(), listAllInvoices()])
+      .then(([enquiriesResult, quotationsResult, salesOrdersResult, invoicesResult]) => {
+        if (enquiriesResult.status === 'fulfilled') setEnquiries(enquiriesResult.value);
+        if (quotationsResult.status === 'fulfilled') setQuotations(quotationsResult.value);
+        if (salesOrdersResult.status === 'fulfilled') setOrders(salesOrdersResult.value);
+        if (invoicesResult.status === 'fulfilled') setInvoices(invoicesResult.value);
+
+        const failed: Array<{ name: string; reason: unknown }> = [];
+        if (enquiriesResult.status === 'rejected') failed.push({ name: 'enquiries', reason: enquiriesResult.reason });
+        if (quotationsResult.status === 'rejected') failed.push({ name: 'quotations', reason: quotationsResult.reason });
+        if (salesOrdersResult.status === 'rejected') failed.push({ name: 'sales orders', reason: salesOrdersResult.reason });
+        if (invoicesResult.status === 'rejected') failed.push({ name: 'invoices', reason: invoicesResult.reason });
+
+        if (failed.length) {
+          const message = failed
+            .map(({ name, reason }) => `${name}: ${reason instanceof Error ? reason.message : String(reason)}`)
+            .join(' | ');
+          setError(`Failed to load archive records (${message})`);
+          if (process.env.NODE_ENV !== 'production') {
+            failed.forEach(({ name, reason }) => {
+              console.error(`[CRM] DocumentArchivePage fetch error (${name})`, reason);
+            });
+          }
+        }
+
         if (process.env.NODE_ENV !== 'production') {
-          console.debug('[CRM] DocumentArchivePage fetched orders', {
-            count: allOrders.length,
-            first: allOrders[0] ?? null,
+          console.debug('[CRM] DocumentArchivePage fetch complete', {
+            enquiries: enquiriesResult.status === 'fulfilled' ? enquiriesResult.value.length : 0,
+            quotations: quotationsResult.status === 'fulfilled' ? quotationsResult.value.length : 0,
+            salesOrders: salesOrdersResult.status === 'fulfilled' ? salesOrdersResult.value.length : 0,
+            invoices: invoicesResult.status === 'fulfilled' ? invoicesResult.value.length : 0,
           });
         }
       })
-      .catch((err: Error) => setError(`Failed to load archive records: ${err.message}`))
       .finally(() => setLoading(false));
   }, []);
 

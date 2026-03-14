@@ -12,17 +12,26 @@ const SalesOrdersListPage = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug('[CRM] SalesOrdersListPage fetch start');
+    }
+
     listSalesOrders()
       .then((items) => {
         setRows(items);
         if (process.env.NODE_ENV !== 'production') {
-          console.debug('[CRM] SalesOrdersListPage fetched orders', {
+          console.debug('[CRM] SalesOrdersListPage fetch complete', {
             count: items.length,
             first: items[0] ?? null,
           });
         }
       })
-      .catch((err: Error) => setError(`Failed to load sale orders: ${err.message}`))
+      .catch((err: Error) => {
+        setError(`Failed to load sale orders: ${err.message}`);
+        if (process.env.NODE_ENV !== 'production') {
+          console.error('[CRM] SalesOrdersListPage fetch error', err);
+        }
+      })
       .finally(() => setLoading(false));
   }, []);
 

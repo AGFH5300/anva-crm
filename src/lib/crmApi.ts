@@ -50,6 +50,21 @@ const formatSupabaseConnectivityError = (err: unknown, action: string) => {
   return err instanceof Error ? err : new Error(message);
 };
 
+const withTimeout = async <T>(promise: PromiseLike<T> | Promise<T>, timeoutMs: number, context: string): Promise<T> => {
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutHandle = setTimeout(() => {
+      reject(new Error(`${context} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([Promise.resolve(promise), timeoutPromise]);
+  } finally {
+    if (timeoutHandle) clearTimeout(timeoutHandle);
+  }
+};
+
 const getDiscountAmount = (baseAmount: number, discountPct: number, discountAmount: number) => {
   const pctAmount = baseAmount * (discountPct / 100);
   if (discountAmount > 0) return Math.min(baseAmount, discountAmount);
@@ -868,7 +883,7 @@ export const convertQuotationToSalesOrder = async (quotationId: string, clientPo
 };
 
 export const getSalesOrderDetail = async (id: string) => {
-  const [{ data: order, error: orderError }, { data: lines, error: linesError }] = await Promise.all([
+  const [{ data: order, error: orderError }, { data: lines, error: linesError }] = await withTimeout(Promise.all([
     supabase
       .schema('crm')
       .from('sales_orders')
@@ -881,7 +896,7 @@ export const getSalesOrderDetail = async (id: string) => {
       .select('id, sales_order_id, description, quantity, supplier_cost, supplier_currency, unit_price, currency, vat_rate, is_zero_rated, is_exempt, line_total, sort_order')
       .eq('sales_order_id', id)
       .order('sort_order')
-  ]);
+  ]), 15000, `Loading sales order ${id}`);
 
   throwIfError(orderError);
   throwIfError(linesError);
@@ -1240,24 +1255,27 @@ const fetchSalesOrdersFromRegistryView = async () => {
 
 export const listSalesOrders = async () => {
   try {
-    const registryResponse = await fetchSalesOrdersFromRegistryView();
+    const registryResponse = await withTimeout(fetchSalesOrdersFromRegistryView(), 15000, 'Loading sales order registry view');
     if (!registryResponse.error) {
       return mapSalesOrderRows(((registryResponse.data ?? []) as SalesOrderRow[])
         .filter((row) => ACTIVE_SALES_ORDER_STATUSES.includes((row.status as SalesOrder['status'] | undefined) ?? 'draft')));
     }
 
-    if (!isUndefinedColumnError(registryResponse.error)) {
-      throw registryResponse.error;
-    }
-
-    const { data, error } = await supabase
+    const fallbackResponse = await withTimeout(Promise.resolve(supabase
       .schema('crm')
       .from('sales_orders')
       .select('id, quotation_id, client_id, document_number, status, issue_date, currency, subtotal, vat_amount, total, client_reference_number, client_po_number, created_at, client:clients(name), quotation:quotations(document_number)')
       .in('status', ACTIVE_SALES_ORDER_STATUSES)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })), 15000, 'Loading sales orders fallback query');
+    const { data, error } = fallbackResponse;
 
-    throwIfError(error);
+    if (error) {
+      if (!isUndefinedColumnError(registryResponse.error)) {
+        throw new Error(`Registry query failed (${registryResponse.error.message}) and fallback query failed (${error.message}).`);
+      }
+      throwIfError(error);
+    }
+
     return mapSalesOrderRows((data ?? []) as SalesOrderRow[]);
   } catch (err) {
     throw formatSupabaseConnectivityError(err, 'load sales orders');
@@ -1266,22 +1284,25 @@ export const listSalesOrders = async () => {
 
 export const listAllSalesOrders = async () => {
   try {
-    const registryResponse = await fetchSalesOrdersFromRegistryView();
+    const registryResponse = await withTimeout(fetchSalesOrdersFromRegistryView(), 15000, 'Loading sales order archive registry view');
     if (!registryResponse.error) {
       return mapSalesOrderRows((registryResponse.data ?? []) as SalesOrderRow[]);
     }
 
-    if (!isUndefinedColumnError(registryResponse.error)) {
-      throw registryResponse.error;
-    }
-
-    const { data, error } = await supabase
+    const fallbackResponse = await withTimeout(Promise.resolve(supabase
       .schema('crm')
       .from('sales_orders')
       .select('id, quotation_id, client_id, document_number, status, issue_date, currency, subtotal, vat_amount, total, client_reference_number, client_po_number, created_at, client:clients(name), quotation:quotations(document_number)')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })), 15000, 'Loading sales order archive fallback query');
+    const { data, error } = fallbackResponse;
 
-    throwIfError(error);
+    if (error) {
+      if (!isUndefinedColumnError(registryResponse.error)) {
+        throw new Error(`Registry query failed (${registryResponse.error.message}) and fallback query failed (${error.message}).`);
+      }
+      throwIfError(error);
+    }
+
     return mapSalesOrderRows((data ?? []) as SalesOrderRow[]);
   } catch (err) {
     throw formatSupabaseConnectivityError(err, 'load sales order archive');
