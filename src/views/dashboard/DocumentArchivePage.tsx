@@ -18,6 +18,7 @@ const DocumentArchivePage = () => {
   const [orders, setOrders] = useState<SalesOrder[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const requested = params.get('type') as RegistryType | null;
@@ -33,8 +34,15 @@ const DocumentArchivePage = () => {
         setQuotations(allQuotations);
         setOrders(allOrders);
         setInvoices(allInvoices);
+        if (process.env.NODE_ENV !== 'production') {
+          console.debug('[CRM] DocumentArchivePage fetched orders', {
+            count: allOrders.length,
+            first: allOrders[0] ?? null,
+          });
+        }
       })
-      .catch((err: Error) => setError(err.message));
+      .catch((err: Error) => setError(`Failed to load archive records: ${err.message}`))
+      .finally(() => setLoading(false));
   }, []);
 
   const needle = query.trim().toLowerCase();
@@ -100,7 +108,7 @@ const DocumentArchivePage = () => {
         <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
           <table className="min-w-full text-left text-xs text-slate-600">
             <thead className="bg-slate-50 text-[11px] uppercase text-slate-500"><tr><th className="px-3 py-2">Sale Order</th><th className="px-3 py-2">Quotation</th><th className="px-3 py-2">Date</th><th className="px-3 py-2">Client</th><th className="px-3 py-2">Client PO</th><th className="px-3 py-2">Status</th></tr></thead>
-            <tbody>{filteredOrders.map((row) => <tr key={row.id} className="border-t"><td className="px-3 py-2 font-semibold"><Link href={`/dashboard/sales-orders/${row.id}`} className="text-primary hover:underline">{row.document_number}</Link></td><td className="px-3 py-2">{row.quotation_document_number || '-'}</td><td className="px-3 py-2">{formatIsoDate(row.issue_date)}</td><td className="px-3 py-2">{row.client_name || row.client_id}</td><td className="px-3 py-2">{row.client_po_number || '-'}</td><td className="px-3 py-2 uppercase">{row.status}</td></tr>)}{!filteredOrders.length ? <tr><td className="px-3 py-4" colSpan={6}>No records.</td></tr> : null}</tbody>
+            <tbody>{loading ? <tr><td className="px-3 py-4" colSpan={6}>Loading records...</td></tr> : null}{filteredOrders.map((row) => <tr key={row.id} className="border-t"><td className="px-3 py-2 font-semibold"><Link href={`/dashboard/sales-orders/${row.id}`} className="text-primary hover:underline">{row.document_number}</Link></td><td className="px-3 py-2">{row.quotation_document_number || '-'}</td><td className="px-3 py-2">{formatIsoDate(row.issue_date)}</td><td className="px-3 py-2">{row.client_name || row.client_id}</td><td className="px-3 py-2">{row.client_po_number || '-'}</td><td className="px-3 py-2 uppercase">{row.status}</td></tr>)}{!loading && !filteredOrders.length ? <tr><td className="px-3 py-4" colSpan={6}>No records.</td></tr> : null}</tbody>
           </table>
         </div>
       ) : null}
